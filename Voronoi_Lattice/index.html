@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
+[hidden] { display: none !important; }
 /* Layout: fixed header, left control column (black tab sections), 3D viewport fills the rest. */
 :root {
   --paper: #ffffff;
@@ -252,6 +253,7 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
             <label class="chk"><input type="radio" name="boundary" value="clip" id="bd-clip"><span class="box"></span><span>Flat cut</span></label>
           </div>
         </div>
+        <div class="row"><div class="inline"><label class="chk"><input type="checkbox" id="exact" checked><span class="box"></span><span>Exact outer size</span></label><button type="button" class="qi" data-help="exact">?</button></div></div>
         <div class="row"><div class="inline"><label class="chk"><input type="checkbox" id="surface" checked><span class="box"></span><span>Struts on outer surface</span></label><button type="button" class="qi" data-help="surface">?</button></div></div>
       </section>
 
@@ -307,6 +309,7 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
         <h2>How it works</h2>
         <p>Random seed points are scattered inside the solid and split space into Voronoi cells. Every cell edge becomes a round strut, and the cells are cut by the outer surface, which adds a cage of struts on the outside.</p>
         <p><b>Min cell size</b> keeps seed points at least this far apart, so every cell holds a sphere of that diameter. Use it to stop small cells from fusing shut when printed. If the requested number of cells does not fit, fewer cells are placed.</p>
+        <p><b>Min strut length</b> collapses struts shorter than this into a single node. Seed spacing alone cannot stop cells from having a few very short edges, so this is the setting that removes tight node clusters.</p>
         <p><b>Relaxation</b> nudges the cells toward equal size. 0 is fully random.</p>
         <p><b>Node fillet</b> blends struts into each other at the nodes. It is a percentage of the strut thickness. The live preview approximates the fillet shape; the mesh is exact.</p>
         <p>Every setting has a <b>?</b> button next to it with a short explanation.</p>
@@ -597,7 +600,72 @@ function sphereArcs(poly, nrm, h, R, segLen) {
 }
 
 // ---------- graph ----------
-function buildGraph(segs, dom, mergeTol, surfaceStruts) {
+function dedupeEdges(ES, flags, dom) {
+  const emap = new Map();
+  for (let [a, b, surf] of ES) {
+    if (a === b) continue;
+    if (a > b) [a, b] = [b, a];
+    const k = a * 1e7 + b;
+    if (dom.shape === 'box') surf = (flags[a] & flags[b]) !== 0;
+    emap.set(k, (emap.get(k) || false) || surf);
+  }
+  const out = [];
+  for (const [k, surf] of emap) { const a = Math.floor(k / 1e7); out.push([a, k - a * 1e7, surf]); }
+  return out;
+}
+
+function snapToDomain(p, f, dom) {
+  if (dom.shape === 'box') {
+    for (let ax = 0; ax < 3; ax++) {
+      if (f & (1 << (2 * ax))) p[ax] = dom.lo[ax];
+      if (f & (1 << (2 * ax + 1))) p[ax] = dom.hi[ax];
+    }
+    return p;
+  }
+  return f & 64 ? v3.mul(p, dom.R / Math.max(v3.len(p), 1e-12)) : p;
+}
+
+// Collapse every strut (chain of edges between junctions) shorter than minLen into one node.
+// Surface nodes stay on the surface; box corners and edges stay put.
+function collapseShort(V, flags, ES, minLen, dom) {
+  for (let pass = 0; pass < 60; pass++) {
+    const nV = V.length;
+    const chains = strutChains(ES, nV);
+    const cand = [];
+    for (const ch of chains) {
+      let len = 0;
+      const nodes = new Set();
+      for (const ei of ch) {
+        const [a, b] = ES[ei];
+        len += v3.len(v3.sub(V[a], V[b]));
+        nodes.add(a); nodes.add(b);
+      }
+      if (len < minLen) cand.push({ len, nodes: [...nodes] });
+    }
+    if (!cand.length) break;
+    cand.sort((x, y) => x.len - y.len);
+    const locked = new Uint8Array(nV), rep = new Int32Array(nV).map((_, i) => i);
+    let done = 0;
+    for (const c of cand) {
+      if (c.nodes.some((n) => locked[n])) continue;
+      let f = 0;
+      for (const n of c.nodes) f |= flags[n];
+      if (dom.shape === 'box' && (f & (f >> 1) & 0b010101)) continue; // would pin to opposite faces
+      let p = [0, 0, 0];
+      for (const n of c.nodes) p = v3.add(p, V[n]);
+      p = snapToDomain(v3.mul(p, 1 / c.nodes.length), f, dom);
+      const r0 = c.nodes[0];
+      for (const n of c.nodes) { rep[n] = r0; locked[n] = 1; }
+      V[r0] = p; flags[r0] = f;
+      done++;
+    }
+    if (!done) break;
+    ES = dedupeEdges(ES.map(([a, b, s]) => [rep[a], rep[b], s]), flags, dom);
+  }
+  return ES;
+}
+
+function buildGraph(segs, dom, mergeTol, surfaceStruts, minStrut) {
   // segs: [{a, b, surf}]
   const P = [], m = segs.length;
   for (const s of segs) P.push(s.a);
@@ -647,20 +715,13 @@ function buildGraph(segs, dom, mergeTol, surfaceStruts) {
       }
     } else if (f & 64) V[i] = v3.mul(V[i], dom.R / Math.max(v3.len(V[i]), 1e-12));
   }
-  const emap = new Map();
-  for (let s = 0; s < m; s++) {
-    let a = inv[s], b = inv[s + m];
-    if (a === b) continue;
-    if (a > b) [a, b] = [b, a];
-    const k = a * 1e7 + b;
-    let surf = segs[s].surf;
-    if (dom.shape === 'box') surf = (flags[a] & flags[b]) !== 0;
-    emap.set(k, (emap.get(k) || false) || surf);
-  }
+  let ES = [];
+  for (let s = 0; s < m; s++) ES.push([inv[s], inv[s + m], segs[s].surf]);
+  ES = dedupeEdges(ES, flags, dom);
+  if (minStrut > 0) ES = collapseShort(V, flags, ES, minStrut, dom);
   let E = [];
-  for (const [k, surf] of emap) {
+  for (const [a, b, surf] of ES) {
     if (!surfaceStruts && surf) continue;
-    const a = Math.floor(k / 1e7), b = k - a * 1e7;
     E.push([a, b]);
   }
   // compact vertices
@@ -734,13 +795,20 @@ function generateLattice(p) {
       }
     }
   });
-  const { V, E } = buildGraph(segs, dom, p.minEdgeFrac * p.thickness, p.surfaceStruts);
+  const { V, E } = buildGraph(segs, dom, p.minEdgeFrac * p.thickness, p.surfaceStruts, p.minStrut || 0);
+  if (!E.length) throw new Error('No struts left: lower the minimum strut length.');
   const chains = strutChains(E, V.length);
+  let shortest = Infinity;
+  for (const ch of chains) {
+    let l = 0;
+    for (const ei of ch) l += v3.len(v3.sub(V[E[ei][0]], V[E[ei][1]]));
+    shortest = Math.min(shortest, l);
+  }
   let minSp = Infinity;
   for (let i = 0; i < seeds.length; i++) for (let j = i + 1; j < seeds.length; j++) minSp = Math.min(minSp, v3.len(v3.sub(seeds[i], seeds[j])));
   const lens = E.map(([a, b]) => v3.len(v3.sub(V[a], V[b])));
   return {
-    V, E, chains, seeds, requested: p.cells, fitted: seeds.length, minSpacing: minSp,
+    V, E, chains, seeds, requested: p.cells, fitted: seeds.length, minSpacing: minSp, shortest,
     totalLength: lens.reduce((s, x) => s + x, 0),
     ms: (typeof performance !== 'undefined' ? performance : Date).now() - t0,
   };
@@ -858,6 +926,7 @@ function meshLattice(job, onProgress) {
     return { segs, i0: x0, i1: x1, j0: y0, j1: y1, zmin: z0, zmax: z1 };
   });
 
+  const trim = job.exact !== false || job.boundary === 'clip';
   const tmp = new Float32Array(NP);
   const acc = new Float64Array(NP);
   const outer = shape === 'box'
@@ -906,8 +975,7 @@ function meshLattice(job, onProgress) {
         let f;
         if (k > 0) f = acc[row + i] > 0 ? -k * Math.log(acc[row + i]) : reach;
         else f = acc[row + i] === Infinity ? reach : acc[row + i] - r;
-        const o = outer(lo[0] + i * voxel, y, z);
-        if (o > f) f = o;
+        if (trim) { const o = outer(lo[0] + i * voxel, y, z); if (o > f) f = o; }
         if (i === 0 || j === 0 || i === nx - 1 || j === ny - 1 || iz === 0 || iz === nz - 1) f = voxel;
         out[row + i] = f;
       }
@@ -1012,7 +1080,7 @@ self.onmessage = (e) => {
       const CI = new Uint32Array(total), CO = new Uint32Array(L.chains.length + 1);
       let o = 0; L.chains.forEach((c, i) => { CO[i] = o; for (const x of c) CI[o++] = x; }); CO[L.chains.length] = o;
       self.postMessage({ type: 'skeleton', id: msg.id, V, E, CI, CO, stats: {
-        requested: L.requested, fitted: L.fitted, minSpacing: L.minSpacing, totalLength: L.totalLength, ms: L.ms,
+        requested: L.requested, fitted: L.fitted, minSpacing: L.minSpacing, shortest: L.shortest, totalLength: L.totalLength, ms: L.ms,
       } }, [V.buffer, E.buffer, CI.buffer, CO.buffer]);
     } else if (msg.type === 'mesh') {
       const chains = [];
@@ -1040,8 +1108,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // ---------------- state (all lengths stored in mm) ----------------
 const S = {
   unit: 'mm', shape: 'box', size: [20, 20, 20], radius: 10,
-  cells: 40, minCell: 3, seed: 42, relax: 2,
-  thickness: 0.8, fillet: 50, boundary: 'inset', surfaceStruts: true,
+  cells: 40, minCell: 3, minStrut: 1, seed: 42, relax: 2,
+  thickness: 0.8, fillet: 50, boundary: 'inset', surfaceStruts: true, exact: true,
   meshRes: 0.15, viewMesh: false, wire: false, fmt: 'stl', xu: 'mm',
 };
 const RES = [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
@@ -1098,6 +1166,7 @@ slider($('boxFields'), { id: 'sz', help: 'box', label: 'Height Z', len: true, mi
 slider($('sphereFields'), { id: 'rad', help: 'radius', label: 'Radius', len: true, min: 1, max: 75, hardMax: 250, step: 0.5, stepIn: 0.01, get: () => S.radius, set: (v) => (S.radius = v) });
 slider($('cellFields'), { id: 'cells', help: 'cells', label: 'Number of cells', int: true, min: 2, max: 600, hardMax: 2000, step: 1, get: () => S.cells, set: (v) => (S.cells = v) });
 slider($('cellFields'), { id: 'minCell', help: 'minCell', label: 'Min cell size', hint: 'cube edge, 0 = off', len: true, min: 0, max: 20, hardMax: 100, step: 0.1, stepIn: 0.005, get: () => S.minCell, set: (v) => (S.minCell = v) });
+slider($('cellFields'), { id: 'minStrut', help: 'minStrut', label: 'Min strut length', hint: '0 = off', len: true, min: 0, max: 10, hardMax: 50, step: 0.1, stepIn: 0.005, get: () => S.minStrut, set: (v) => (S.minStrut = v) });
 slider($('cellFields'), { id: 'relax', help: 'relax', label: 'Relaxation', hint: '0 = fully random', int: true, min: 0, max: 8, step: 1, get: () => S.relax, set: (v) => (S.relax = v), unitText: 'it' });
 slider($('strutFields'), { id: 'thick', help: 'thick', label: 'Strut thickness', hint: 'diameter', len: true, min: 0.1, max: 4, hardMax: 20, step: 0.05, stepIn: 0.001, get: () => S.thickness, set: (v) => (S.thickness = v) });
 slider($('strutFields'), { id: 'fillet', help: 'fillet', label: 'Node fillet', hint: '% of thickness', min: 0, max: 100, step: 1, get: () => S.fillet, set: (v) => (S.fillet = v), unitText: '%' });
@@ -1109,7 +1178,13 @@ function radios(name, key, after) {
 }
 radios('unit', 'unit', () => { controls.forEach((c) => c.refresh()); fillRes(); updateDims(); updateStats(); });
 radios('shape', 'shape', () => { $('boxFields').hidden = S.shape !== 'box'; $('sphereFields').hidden = S.shape !== 'sphere'; changed(); });
-radios('boundary', 'boundary');
+radios('boundary', 'boundary', () => { syncExact(); changed(); });
+function syncExact() {
+  const el = $('exact'), flat = S.boundary === 'clip';
+  el.disabled = flat; el.checked = flat || S.exact;
+  el.closest('.chk').style.opacity = flat ? '0.55' : '';
+}
+$('exact').addEventListener('change', (e) => { S.exact = e.target.checked; changed(); });
 radios('fmt', 'fmt', updateExport);
 radios('xu', 'xu', updateExport);
 $('surface').addEventListener('change', (e) => { S.surfaceStruts = e.target.checked; changed(); });
@@ -1130,15 +1205,17 @@ $('wire').addEventListener('change', (e) => { S.wire = e.target.checked; matMesh
 const HELP = {
   units: 'Unit for every length on this page. Switching converts the numbers; the lattice itself does not change.',
   shape: 'The outer solid the lattice fills. Box: set length, width and height. Sphere: set the radius. The Voronoi cells are cut by this shape, and the cut adds a cage of struts on its surface.',
-  box: 'Outer size of the box along this axis. With the Rounded outer surface the finished part measures exactly this.',
-  radius: 'Outer radius of the sphere. The finished part fits inside a sphere of this radius.',
+  box: 'Outer size of the box along this axis. With Exact outer size on (or Flat cut), the finished part measures exactly this.',
+  radius: 'Outer radius of the sphere. With Exact outer size on (or Flat cut), the finished part has exactly this radius.',
   cells: 'How many Voronoi cells (seed points) to place. More cells give smaller pores and more struts. A large minimum cell size can lower the number that actually fits.',
-  minCell: 'Smallest cell allowed, given as the edge of a cube. Seed points stay at least this far apart, and at least half of it from the outer surface, so every cell holds a sphere this wide. Raise it if small cells fuse shut when printed. 0 turns it off.',
+  minCell: 'Smallest cell allowed, given as the edge of a cube. Seed points stay at least this far apart, and at least half of it from the outer surface, so every cell holds a sphere this wide. 0 turns it off. Note that well-spaced seeds can still give cells with a few very short edges; Min strut length handles those.',
+  minStrut: 'Shortest strut allowed. Any strut shorter than this is collapsed into a single node, so tight little clusters of nodes, which tend to fuse into blobs when printed, are removed. Nodes on the outer surface stay on the surface. Raising it makes the lattice a bit more regular and removes some struts. 0 turns it off. A value of about 1 to 2 times the strut thickness works well.',
   relax: 'Lloyd relaxation steps. Each step moves every seed to the centre of its cell, so cells become more even in size and shape. 0 keeps the fully random layout.',
   seed: 'Number that drives the random layout. The same seed with the same settings always gives the same lattice. New seed picks a random one.',
   thick: 'Diameter of every strut.',
   fillet: 'Rounds the joints where struts meet, as a percentage of the strut thickness. 0 gives sharp joints, 100 gives large smooth blends. Fillets add material, so relative density goes up. The live preview approximates the shape; the processed mesh is exact.',
   boundary: 'How struts meet the outer surface. Rounded: outer struts sit just inside the surface, so the part measures exactly the set size and its edges are round like the struts. Flat cut: outer struts are centred on the surface and then trimmed flush, so the outer faces are flat. Use Flat cut when the part must sit flat, for example between compression test plates.',
+  exact: 'Trims anything that pokes out past the outer surface, mainly fillet bulges at the outer nodes, so the part measures exactly the set size. Off: the outer nodes keep their full round fillet but the part ends up slightly larger. Flat cut is always exact. The measured size of the mesh is shown under Mesh size once a mesh is built.',
   surface: 'On: struts run along the outer surface and form a closed cage. Off: those struts are removed and the cells stay open at the surface.',
   meshres: 'Voxel size used to turn the struts into triangles. Smaller is smoother and more accurate, but slower and gives bigger files. A good starting point is about a sixth of the strut thickness, or finer.',
   mesh: 'View mesh shows the real solid instead of the strut preview. While you change settings it may use a coarser grid to stay quick. Wireframe shows the triangle edges. Process mesh builds the mesh at the chosen resolution, which is needed before downloading.',
@@ -1180,8 +1257,45 @@ const orbit = new OrbitControls(camera, canvas);
 orbit.enableDamping = true; orbit.dampingFactor = 0.09;
 
 const root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root); // lattice Z is up
-const matStrut = new THREE.MeshStandardMaterial({ color: 0xd2d2d6, metalness: 0, roughness: 0.75 });
+const matStrut = new THREE.MeshStandardMaterial({ color: 0xd2d2d6, metalness: 0, roughness: 0.75, side: THREE.DoubleSide });
 const matFlare = new THREE.MeshStandardMaterial({ color: 0xd2d2d6, metalness: 0, roughness: 0.75, side: THREE.DoubleSide });
+// Preview trim: hide everything outside the outer surface (as the mesher does) and paint
+// the inside seen through the cut a flat colour, so the cut reads as a flat face.
+const clipU = {
+  uClipMode: { value: 0 }, // 0 off, 1 box, 2 sphere
+  uClipHalf: { value: new THREE.Vector3(1, 1, 1) },
+  uClipR: { value: 1 },
+  uCapColor: { value: new THREE.Vector3(0.8, 0.8, 0.82) }, // output (sRGB) value
+};
+function addTrim(mat) {
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, clipU);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vClipP;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef USE_INSTANCING
+  vClipP = (instanceMatrix * vec4(transformed, 1.0)).xyz;
+#else
+  vClipP = transformed;
+#endif`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vClipP;\nuniform int uClipMode;\nuniform vec3 uClipHalf;\nuniform float uClipR;\nuniform vec3 uCapColor;')
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+  if (uClipMode == 1 && any(greaterThan(abs(vClipP), uClipHalf))) discard;
+  if (uClipMode == 2 && length(vClipP) > uClipR) discard;`)
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+  if (!gl_FrontFacing) gl_FragColor = vec4(uCapColor, 1.0);`);
+  };
+  mat.customProgramCacheKey = () => 'trim';
+}
+addTrim(matStrut); addTrim(matFlare);
+function updateTrim() {
+  const on = S.boundary === 'clip' || S.exact;
+  clipU.uClipMode.value = on ? (S.shape === 'box' ? 1 : 2) : 0;
+  const e = 1e-4 * Math.max(...S.size, S.radius);
+  clipU.uClipHalf.value.set(S.size[0] / 2 + e, S.size[1] / 2 + e, S.size[2] / 2 + e);
+  clipU.uClipR.value = S.radius + e;
+}
 const matMesh = new THREE.MeshStandardMaterial({ color: 0xd2d2d6, metalness: 0, roughness: 0.75 });
 const matOutline = new THREE.LineBasicMaterial({ color: 0x9a9aa2, transparent: true, opacity: 0.55 });
 const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 14, 1, true);
@@ -1249,14 +1363,15 @@ function geomParams() {
   return {
     shape: S.shape, size: S.size.slice(), radius: S.radius, cells: S.cells, minCell: S.minCell,
     thickness: S.thickness, seed: S.seed, fillet: S.fillet / 100, relax: S.relax,
-    boundary: S.boundary, surfaceStruts: S.surfaceStruts, minEdgeFrac: 0.5,
+    boundary: S.boundary, surfaceStruts: S.surfaceStruts, minEdgeFrac: 0.5, minStrut: S.minStrut,
+    exact: S.boundary === 'clip' || S.exact,
   };
 }
 const geomKey = () => JSON.stringify(geomParams());
 
 let tChange = null;
 function changed() {
-  updateDims(); setOutline(); updateExport();
+  updateDims(); setOutline(); updateExport(); updateTrim();
   clearTimeout(tChange);
   tChange = setTimeout(requestSkeleton, 70);
 }
@@ -1405,6 +1520,7 @@ function runMesh(final) {
   meshWorker.postMessage({
     type: 'mesh', id, V: sk.V.slice(), E: sk.E.slice(), CI: sk.CI.slice(), CO: sk.CO.slice(),
     r: p.thickness / 2, k: p.fillet * p.thickness * 0.25, voxel, shape: p.shape, size: p.size, radius: p.radius,
+    exact: p.exact, boundary: p.boundary,
   });
 }
 function showMesh(res, final) {
@@ -1415,7 +1531,12 @@ function showMesh(res, final) {
   g.computeVertexNormals();
   meshObj = new THREE.Mesh(g, matMesh);
   root.add(meshObj);
-  displayed = { key: res.key, final, voxel: res.voxel, tris: res.indices.length / 3, volume: res.volume };
+  g.computeBoundingBox();
+  const bmin = g.boundingBox.min, bmax = g.boundingBox.max;
+  const bbox = [bmax.x - bmin.x, bmax.y - bmin.y, bmax.z - bmin.z];
+  let rmax = 0; const P = res.positions;
+  for (let i = 0; i < P.length; i += 3) rmax = Math.max(rmax, P[i] * P[i] + P[i + 1] * P[i + 1] + P[i + 2] * P[i + 2]);
+  displayed = { key: res.key, final, voxel: res.voxel, tris: res.indices.length / 3, volume: res.volume, bbox, outerR: Math.sqrt(rmax) };
   if (final && !S.viewMesh) { S.viewMesh = true; $('viewMesh').checked = true; }
   applyVisibility(); updateStats(); updateExport();
 }
@@ -1459,10 +1580,12 @@ function updateStats() {
   if (sk) {
     const st = sk.stats, nE = sk.E.length / 2, nV = sk.V.length / 3;
     rows.push(['Cells', st.fitted], ['Struts', nE], ['Nodes', nV],
-      ['Min seed gap', `${fmtLen(st.minSpacing)} ${S.unit}`]);
+      ['Min seed gap', `${fmtLen(st.minSpacing)} ${S.unit}`], ['Shortest strut', `${fmtLen(st.shortest)} ${S.unit}`]);
     const approx = (st.totalLength * Math.PI * (sk.params.thickness / 2) ** 2) / envelopeVolume();
     $('status').innerHTML = `<b>${st.fitted}</b> cells · <b>${nE}</b> struts · <b>${nV}</b> nodes`;
     if (displayed && meshIsCurrent()) {
+      const bb = displayed.bbox;
+      rows.push(['Mesh size', S.shape === 'box' ? `${bb.map((x) => fmtLen(x)).join(' × ')} ${S.unit}` : `Ø ${fmtLen(2 * displayed.outerR)} ${S.unit} (outer)`]);
       rows.push(['Solid volume', volStr(displayed.volume)], ['Rel. density', `${(100 * displayed.volume / envelopeVolume()).toFixed(2)} %`],
         ['Triangles', displayed.tris.toLocaleString('en-US')]);
     } else rows.push(['Rel. density', `≈ ${(approx * 100).toFixed(1)} %`]);
@@ -1577,7 +1700,7 @@ $('download').addEventListener('click', async () => {
 });
 
 // ---------------- boot ----------------
-updateDims(); setOutline(); fitView(); updateExport(); requestSkeleton();
+updateDims(); setOutline(); updateTrim(); fitView(); updateExport(); requestSkeleton();
 </script>
 
 </body>

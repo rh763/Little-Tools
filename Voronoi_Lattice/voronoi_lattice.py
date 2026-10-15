@@ -14,6 +14,8 @@ How it works
    sampling), so every cell is at least that wide -> no tiny cells that
    clog up / fuse when printed.  Optional Lloyd relaxation makes the
    cells more uniform.
+   MIN_STRUT_LENGTH then collapses any strut shorter than that into a
+   single node, which removes tight node clusters.
 2. Voronoi tessellation clipped to the solid:
      box    -> seeds mirrored across the 6 faces (exact flat clipping)
      sphere -> Voronoi faces intersected with the sphere -> curved arcs
@@ -31,7 +33,7 @@ Edit the PARAMETERS block below and run:
     python voronoi_lattice.py
 or override from the command line, e.g.:
     python voronoi_lattice.py --shape box --size 20 20 20 --cells 40 --thickness 0.8 --fillet 0.5 --seed 7
-    python voronoi_lattice.py --shape sphere --radius 12 --cells 60 --min-cell 3
+    python voronoi_lattice.py --shape sphere --radius 12 --cells 60 --min-cell 3 --min-strut 1.2
     python voronoi_lattice.py -h          (list all options)
 """
 
@@ -55,6 +57,11 @@ MIN_CELL_SIZE = 3.0            # smallest allowed cell, as the edge of a cube [m
                                #   contains a sphere of this diameter.
                                #   0 / None = no limit.  If N_CELLS cells don't fit,
                                #   fewer cells are placed (a warning is printed).
+MIN_STRUT_LENGTH = 1.0         # shortest strut allowed [mm]: shorter struts are
+                               #   collapsed into one node, which removes tight
+                               #   clusters of nodes (well-spaced seeds can still
+                               #   give cells with very short edges). 0 = off.
+                               #   About 1-2 x STRUT_THICKNESS works well.
 STRUT_THICKNESS = 0.8          # strut diameter [mm]
 SEED = 42                      # random seed -> same seed = same lattice
 FILLET = 0.5                   # node fillet, relative to strut thickness
@@ -65,6 +72,11 @@ BOUNDARY = "inset"             # "inset": strut surfaces touch the outer surface
                                #          outer dimensions exact, rounded frame
                                # "clip" : strut axes on the outer surface, then cut
                                #          flush -> flat / smooth outer faces
+EXACT_SIZE = True              # True: trim anything past the outer surface (mainly
+                               #   fillet bulges at outer nodes), so the part measures
+                               #   exactly BOX_SIZE / SPHERE_RADIUS. False: outer nodes
+                               #   keep their full round fillet, part is slightly
+                               #   larger. "clip" boundary is always exact.
 SURFACE_STRUTS = True          # True: keep struts on the outer surface (closed cage)
                                # False: open lattice, interior struts only
 VOXEL_SIZE = None              # mesh resolution [mm]; None = thickness / 6
@@ -327,8 +339,72 @@ def sphere_segments(seeds, dom, seg_len):
     return np.array(A), np.array(B), np.array(surf)
 
 
-def build_graph(A, B, surf, merge_tol, dom, surface_struts):
-    """Merge segment endpoints into nodes, dedupe edges."""
+def snap_to_domain(p, f, dom):
+    p = np.array(p, float)
+    if dom.shape == "box":
+        for ax in range(3):
+            if f & (1 << (2 * ax)):
+                p[ax] = dom.lo[ax]
+            if f & (1 << (2 * ax + 1)):
+                p[ax] = dom.hi[ax]
+        return p
+    if f & 64:
+        p *= dom.R / max(np.linalg.norm(p), 1e-12)
+    return p
+
+
+def dedupe_edges(E, surf, flags, dom):
+    """Drop self-loops and duplicate edges. Box: an edge is a surface strut
+    when both ends lie on the same face."""
+    E = np.sort(np.asarray(E), axis=1)
+    keep = E[:, 0] != E[:, 1]
+    E, surf = E[keep], np.asarray(surf)[keep]
+    if dom.shape == "box":
+        surf = (flags[E[:, 0]] & flags[E[:, 1]]) != 0
+    E, inv = np.unique(E, axis=0, return_inverse=True)
+    s = np.zeros(len(E), bool)
+    np.logical_or.at(s, inv.ravel(), surf)
+    return E, s
+
+
+def collapse_short(V, flags, E, surf, min_len, dom):
+    """Collapse every strut (chain of edges between junctions) shorter than
+    min_len into one node. Surface nodes stay on the surface, box corners and
+    edges stay put. V and flags are updated in place."""
+    for _ in range(60):
+        chains = strut_chains(E, len(V))
+        cand = []
+        for ch in chains:
+            ab = E[ch]
+            length = np.linalg.norm(V[ab[:, 0]] - V[ab[:, 1]], axis=1).sum()
+            if length < min_len:
+                cand.append((length, np.unique(ab)))
+        if not cand:
+            break
+        cand.sort(key=lambda c: c[0])
+        locked = np.zeros(len(V), bool)
+        rep = np.arange(len(V))
+        done = 0
+        for _, nodes in cand:
+            if locked[nodes].any():
+                continue
+            f = int(np.bitwise_or.reduce(flags[nodes]))
+            if dom.shape == "box" and (f & (f >> 1) & 0b010101):
+                continue  # would pin the node to two opposite faces
+            r0 = nodes[0]
+            V[r0] = snap_to_domain(V[nodes].mean(0), f, dom)
+            flags[r0] = f
+            rep[nodes] = r0
+            locked[nodes] = True
+            done += 1
+        if not done:
+            break
+        E, surf = dedupe_edges(rep[E], surf, flags, dom)
+    return E, surf
+
+
+def build_graph(A, B, surf, merge_tol, dom, surface_struts, min_strut=0.0):
+    """Merge segment endpoints into nodes, dedupe edges, collapse short struts."""
     P = np.vstack([A, B])
     tree = cKDTree(P)
     parent = np.arange(len(P))
@@ -349,34 +425,26 @@ def build_graph(A, B, surf, merge_tol, dom, surface_struts):
     np.add.at(V, inv, P)
     V /= np.bincount(inv)[:, None]
 
-    # keep surface nodes exactly on the surface
+    # keep surface nodes exactly on the surface; flags = which faces a node is on
+    # (box: bit 2*axis for the low face, 2*axis+1 for the high face; sphere: 64)
+    flags = np.zeros(len(uniq), dtype=np.int64)
     if dom.shape == "box":
         for ax in range(3):
-            for bound in (dom.lo[ax], dom.hi[ax]):
+            for side, bound in enumerate((dom.lo[ax], dom.hi[ax])):
                 on = np.zeros(len(uniq), bool)
                 np.logical_or.at(on, inv, np.isclose(P[:, ax], bound, atol=1e-6))
-                V[on, ax] = bound
+                flags[on] |= 1 << (2 * ax + side)
     else:
         on = np.zeros(len(uniq), bool)
         np.logical_or.at(on, inv, np.abs(np.linalg.norm(P, axis=1) - dom.R) < 1e-6)
-        V[on] *= (dom.R / np.linalg.norm(V[on], axis=1))[:, None]
+        flags[on] = 64
+    for i in np.nonzero(flags)[0]:
+        V[i] = snap_to_domain(V[i], flags[i], dom)
 
     m = len(A)
-    E = np.c_[inv[:m], inv[m:]]
-    keep = E[:, 0] != E[:, 1]
-    E, surf = E[keep], surf[keep]
-    E = np.sort(E, axis=1)
-
-    # surface flag for box: both ends on the same face
-    if dom.shape == "box":
-        surf = np.zeros(len(E), bool)
-        for ax in range(3):
-            for bound in (dom.lo[ax], dom.hi[ax]):
-                on = np.abs(V[:, ax] - bound) < 1e-6
-                surf |= on[E[:, 0]] & on[E[:, 1]]
-
-    E, idx = np.unique(E, axis=0, return_index=True)
-    surf = surf[idx]
+    E, surf = dedupe_edges(np.c_[inv[:m], inv[m:]], surf, flags, dom)
+    if min_strut > 0:
+        E, surf = collapse_short(V, flags, E, surf, min_strut, dom)
     if not surface_struts:
         E = E[~surf]
 
@@ -513,7 +581,8 @@ def preview(V, E):
 def build(shape="box", size=BOX_SIZE, radius=SPHERE_RADIUS, n_cells=N_CELLS,
           min_cell=MIN_CELL_SIZE, thickness=STRUT_THICKNESS, seed=SEED, fillet=FILLET,
           relax_iters=RELAX_ITERS, boundary=BOUNDARY, surface_struts=SURFACE_STRUTS,
-          voxel=VOXEL_SIZE, min_edge_frac=MIN_EDGE_FRAC, output=OUTPUT, show=PREVIEW):
+          voxel=VOXEL_SIZE, min_edge_frac=MIN_EDGE_FRAC, output=OUTPUT, show=PREVIEW,
+          min_strut=MIN_STRUT_LENGTH, exact=EXACT_SIZE):
     t0 = time.time()
     r = thickness / 2.0
     voxel = voxel or thickness / 6.0
@@ -536,10 +605,15 @@ def build(shape="box", size=BOX_SIZE, radius=SPHERE_RADIUS, n_cells=N_CELLS,
         A, B, surf = box_segments(seeds, dom)
     else:
         A, B, surf = sphere_segments(seeds, dom, seg_len=1.5 * thickness)
-    V, E = build_graph(A, B, surf, min_edge_frac * thickness, dom, surface_struts)
+    V, E = build_graph(A, B, surf, min_edge_frac * thickness, dom, surface_struts,
+                       min_strut or 0.0)
+    if len(E) == 0:
+        raise ValueError("No struts left: lower MIN_STRUT_LENGTH.")
     lens = np.linalg.norm(V[E[:, 0]] - V[E[:, 1]], axis=1)
+    shortest = min(lens[ch].sum() for ch in strut_chains(E, len(V)))
     print(f"Skeleton: {len(V)} nodes, {len(E)} struts, "
-          f"length mean {lens.mean():.2f} mm (min {lens.min():.2f}, max {lens.max():.2f})")
+          f"length mean {lens.mean():.2f} mm, shortest strut {shortest:.2f} mm"
+          + (f" (limit {min_strut:g} mm)" if min_strut else ""))
     if show:
         preview(V, E)
 
@@ -553,8 +627,9 @@ def build(shape="box", size=BOX_SIZE, radius=SPHERE_RADIUS, n_cells=N_CELLS,
     print(f"Voxel grid: {gshape[0]} x {gshape[1]} x {gshape[2]}  (voxel {voxel:.3f} mm)")
 
     f = strut_sdf(V, E, r, k, grid_lo, voxel, gshape)
-    f = np.maximum(f, outer_sdf(shape, grid_lo, voxel, gshape,
-                                size=np.asarray(size, float), R=radius))
+    if exact or boundary == "clip":  # trim everything past the outer surface
+        f = np.maximum(f, outer_sdf(shape, grid_lo, voxel, gshape,
+                                    size=np.asarray(size, float), R=radius))
     for ax in range(3):  # close the mesh at the grid border
         idx = [slice(None)] * 3
         idx[ax] = [0, -1]
@@ -577,7 +652,10 @@ def build(shape="box", size=BOX_SIZE, radius=SPHERE_RADIUS, n_cells=N_CELLS,
     env = np.prod(size) if shape == "box" else 4 / 3 * np.pi * radius ** 3
     ext = verts.max(0) - verts.min(0)
     print(f"Mesh: {len(verts)} vertices, {len(faces)} triangles")
-    print(f"Outer size: {ext[0]:.2f} x {ext[1]:.2f} x {ext[2]:.2f} mm")
+    if shape == "box":
+        print(f"Outer size: {ext[0]:.2f} x {ext[1]:.2f} x {ext[2]:.2f} mm")
+    else:
+        print(f"Outer diameter: {2 * np.linalg.norm(verts, axis=1).max():.2f} mm")
     print(f"Solid volume: {vol:.1f} mm^3   relative density: {vol / env * 100:.1f} %")
     print(f"Saved: {output}   ({time.time() - t0:.1f} s)")
     return output
@@ -592,6 +670,10 @@ def main():
     p.add_argument("--cells", type=int, default=N_CELLS, help="number of Voronoi cells")
     p.add_argument("--min-cell", type=float, default=MIN_CELL_SIZE,
                    help="minimum cell size (cube edge) in mm, 0 = off")
+    p.add_argument("--min-strut", type=float, default=MIN_STRUT_LENGTH,
+                   help="shortest strut in mm; shorter struts are collapsed, 0 = off")
+    p.add_argument("--no-exact", action="store_true",
+                   help="do not trim fillet bulges at the outer surface (part slightly larger)")
     p.add_argument("--thickness", type=float, default=STRUT_THICKNESS, help="strut diameter in mm")
     p.add_argument("--seed", type=int, default=SEED, help="random seed (reproducibility)")
     p.add_argument("--fillet", type=float, default=FILLET,
@@ -607,7 +689,7 @@ def main():
     a = p.parse_args()
     build(a.shape, a.size, a.radius, a.cells, a.min_cell, a.thickness, a.seed, a.fillet,
           a.relax, a.boundary, SURFACE_STRUTS and not a.no_surface, a.voxel, a.min_edge,
-          a.out, a.preview)
+          a.out, a.preview, a.min_strut, EXACT_SIZE and not a.no_exact)
 
 
 if __name__ == "__main__":
