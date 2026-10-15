@@ -8,7 +8,7 @@
 <meta name="description" content="Design stochastic Voronoi strut lattices in a box or sphere and export them as STL or OBJ.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=PT+Sans:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: fixed header, left control column (black tab sections), 3D viewport fills the rest. */
 :root {
@@ -21,7 +21,7 @@
   --tab-ink: #ffffff;
   --signal: #f3e500;
   --warn: #a8430f;
-  --font-logo: "Doto", "Courier New", monospace;
+  --font-logo: "Arial Black", "Arial Bold", Gadget, Arial, sans-serif;
   --font-ui: "PT Sans", "Trebuchet MS", Arial, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   color-scheme: light;
@@ -37,7 +37,7 @@ body {
 .app {
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
@@ -46,9 +46,9 @@ header {
   padding-block: 10px 6px;
 }
 .logo {
-  font: 900 26px/1 var(--font-logo); letter-spacing: 0.02em; margin: 0; white-space: nowrap;
+  font: 900 24px/1 var(--font-logo); letter-spacing: 0.01em; text-transform: uppercase; margin: 0;
 }
-.logo small { font-weight: 700; font-size: 26px; color: var(--muted); }
+.logo small { font: inherit; color: var(--muted); }
 .head-links { display: flex; gap: 2px; align-items: stretch; }
 .head-links button {
   font: 700 12px var(--font-ui); text-transform: lowercase; border: 0; cursor: pointer;
@@ -65,7 +65,7 @@ main { display: grid; grid-template-columns: 300px 1fr; gap: 20px; min-height: 0
   display: flex; flex-direction: column; gap: 18px;
 }
 .intro { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; max-width: 34ch; }
-section.group { display: flex; flex-direction: column; gap: 9px; }
+section.group, .group { display: flex; flex-direction: column; gap: 11px; }
 .tab {
   align-self: flex-start; background: var(--tab); color: var(--tab-ink);
   font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: 0.08em;
@@ -162,13 +162,37 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .help-panel h2 { font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 6px; }
 .help-panel p { margin: 0 0 9px; }
 
+/* ---------- help icons ---------- */
+.tabline { display: flex; align-items: center; gap: 8px; }
+.inline { display: flex; align-items: center; gap: 8px; }
+.qi {
+  flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted);
+  background: var(--paper); color: var(--muted); font: 700 10px/13px var(--font-ui);
+  padding: 0; cursor: pointer; text-align: center;
+}
+.qi:hover, .qi[aria-expanded="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.qi:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.lbl .qi { margin-left: 6px; vertical-align: -2px; }
+.lbl > span:first-child, .lbl > label { display: inline-flex; align-items: center; }
+.explain {
+  margin: 2px 0 2px; padding: 7px 9px; background: var(--paper); border-left: 3px solid var(--ink);
+  font-size: 12px; line-height: 1.45; color: var(--ink); text-transform: none; letter-spacing: 0;
+}
+.contact {
+  padding-block: 8px 10px; font-size: 11px; color: var(--muted);
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+}
+.contact span { color: var(--ink); font-family: var(--font-num); user-select: all; }
+.contact a { color: inherit; text-decoration: none; }
+.contact a:hover { text-decoration: underline; }
+
 @media (max-width: 760px) {
   body { overflow: auto; }
   .app { height: auto; }
   main { grid-template-columns: 1fr; }
   .view { order: -1; height: 62vh; min-height: 320px; }
   .side { overflow: visible; padding-right: 0; }
-  .logo, .logo small { font-size: 19px; }
+  .logo { font-size: 18px; }
 }
 @media (prefers-reduced-motion: reduce) { .progress span { transition: none; } }
 </style>
@@ -188,7 +212,7 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
       <p class="intro">Design a stochastic Voronoi strut lattice. Change a value and the preview updates. Process the mesh when you are happy, then download it.</p>
 
       <section class="group">
-        <h2 class="tab">Units</h2>
+        <div class="tabline"><h2 class="tab">Units</h2><button type="button" class="qi" data-help="units">?</button></div>
         <div class="checks" role="radiogroup" aria-label="Length units">
           <label class="chk"><input type="radio" name="unit" value="mm" id="unit-mm" checked><span class="box"></span><span>mm</span></label>
           <label class="chk"><input type="radio" name="unit" value="in" id="unit-in"><span class="box"></span><span>inch</span></label>
@@ -196,7 +220,7 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
       </section>
 
       <section class="group">
-        <h2 class="tab">Solid geometry</h2>
+        <div class="tabline"><h2 class="tab">Solid geometry</h2><button type="button" class="qi" data-help="shape">?</button></div>
         <div class="checks" role="radiogroup" aria-label="Solid shape">
           <label class="chk"><input type="radio" name="shape" value="box" id="shape-box" checked><span class="box"></span><span>Box</span></label>
           <label class="chk"><input type="radio" name="shape" value="sphere" id="shape-sphere"><span class="box"></span><span>Sphere</span></label>
@@ -206,11 +230,11 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
       </section>
 
       <section class="group">
-        <h2 class="tab">Cells</h2>
+        <div class="tabline"><h2 class="tab">Cells</h2></div>
         <div id="cellFields" class="group"></div>
         <p class="note" id="fitNote" hidden></p>
         <div class="row">
-          <div class="lbl"><label for="seed">Random seed</label><span class="hint">same seed, same lattice</span></div>
+          <div class="lbl"><label for="seed">Random seed<button type="button" class="qi" data-help="seed">?</button></label><span class="hint">same seed, same lattice</span></div>
           <div class="seedrow">
             <input type="number" id="seed" min="0" max="999999" step="1" value="42">
             <button type="button" class="b" id="newSeed">New seed</button>
@@ -219,22 +243,22 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
       </section>
 
       <section class="group">
-        <h2 class="tab">Struts</h2>
+        <div class="tabline"><h2 class="tab">Struts</h2></div>
         <div id="strutFields" class="group"></div>
         <div class="row">
-          <div class="lbl"><span>Outer surface</span></div>
+          <div class="lbl"><span>Outer surface<button type="button" class="qi" data-help="boundary">?</button></span></div>
           <div class="checks" role="radiogroup" aria-label="Outer surface">
             <label class="chk"><input type="radio" name="boundary" value="inset" id="bd-inset" checked><span class="box"></span><span>Rounded</span></label>
             <label class="chk"><input type="radio" name="boundary" value="clip" id="bd-clip"><span class="box"></span><span>Flat cut</span></label>
           </div>
         </div>
-        <label class="chk"><input type="checkbox" id="surface" checked><span class="box"></span><span>Struts on outer surface</span></label>
+        <div class="row"><div class="inline"><label class="chk"><input type="checkbox" id="surface" checked><span class="box"></span><span>Struts on outer surface</span></label><button type="button" class="qi" data-help="surface">?</button></div></div>
       </section>
 
       <section class="group">
-        <h2 class="tab">Mesh</h2>
+        <div class="tabline"><h2 class="tab">Mesh</h2><button type="button" class="qi" data-help="mesh">?</button></div>
         <div class="row">
-          <div class="lbl"><label for="meshRes">Mesh resolution</label><span class="hint">voxel size</span></div>
+          <div class="lbl"><label for="meshRes">Mesh resolution<button type="button" class="qi" data-help="meshres">?</button></label><span class="hint">voxel size</span></div>
           <select id="meshRes"></select>
         </div>
         <div class="checks">
@@ -246,17 +270,17 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
       </section>
 
       <section class="group">
-        <h2 class="tab">Export</h2>
+        <div class="tabline"><h2 class="tab">Export</h2><button type="button" class="qi" data-help="export">?</button></div>
         <div class="trio">
           <div class="row">
-            <div class="lbl"><span>Format</span></div>
+            <div class="lbl"><span>Format<button type="button" class="qi" data-help="format">?</button></span></div>
             <div class="checks" role="radiogroup" aria-label="File format">
               <label class="chk"><input type="radio" name="fmt" value="stl" id="fmt-stl" checked><span class="box"></span><span>STL</span></label>
               <label class="chk"><input type="radio" name="fmt" value="obj" id="fmt-obj"><span class="box"></span><span>OBJ</span></label>
             </div>
           </div>
           <div class="row">
-            <div class="lbl"><span>File units</span></div>
+            <div class="lbl"><span>File units<button type="button" class="qi" data-help="xunits">?</button></span></div>
             <div class="checks" role="radiogroup" aria-label="File units">
               <label class="chk"><input type="radio" name="xu" value="mm" id="xu-mm" checked><span class="box"></span><span>mm</span></label>
               <label class="chk"><input type="radio" name="xu" value="in" id="xu-in"><span class="box"></span><span>in</span></label>
@@ -284,14 +308,15 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
         <p>Random seed points are scattered inside the solid and split space into Voronoi cells. Every cell edge becomes a round strut, and the cells are cut by the outer surface, which adds a cage of struts on the outside.</p>
         <p><b>Min cell size</b> keeps seed points at least this far apart, so every cell holds a sphere of that diameter. Use it to stop small cells from fusing shut when printed. If the requested number of cells does not fit, fewer cells are placed.</p>
         <p><b>Relaxation</b> nudges the cells toward equal size. 0 is fully random.</p>
-        <p><b>Node fillet</b> blends struts into each other at the nodes. It is a percentage of the strut thickness.</p>
-        <p><b>Rounded</b> keeps strut surfaces inside the outer dimensions with round edges. <b>Flat cut</b> centres the outer struts on the surface and trims them flush.</p>
+        <p><b>Node fillet</b> blends struts into each other at the nodes. It is a percentage of the strut thickness. The live preview approximates the fillet shape; the mesh is exact.</p>
+        <p>Every setting has a <b>?</b> button next to it with a short explanation.</p>
         <p><b>Mesh resolution</b> is the voxel size used to build the triangle mesh. The live mesh preview uses a coarser grid when needed. Process mesh builds it at the chosen resolution, ready to download.</p>
         <h2>Viewer</h2>
         <p>Drag to rotate. Scroll or pinch to zoom. Right-drag or two-finger drag to pan.</p>
       </div>
     </div>
   </main>
+  <footer class="contact">Questions or problems? Please contact <a href="mailto:luciush0617@gmail.com"><span>luciush0617@gmail.com</span></a> and <a href="mailto:rh763@cornell.edu"><span>rh763@cornell.edu</span></a></footer>
 </div>
 
 <script type="text/plain" id="worker-src">
@@ -1011,7 +1036,6 @@ self.onmessage = (e) => {
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ---------------- state (all lengths stored in mm) ----------------
 const S = {
@@ -1034,7 +1058,7 @@ const controls = [];
 function slider(parent, o) {
   const row = document.createElement('div');
   row.className = 'row';
-  row.innerHTML = `<div class="lbl"><label for="${o.id}">${o.label}</label>${o.hint ? `<span class="hint">${o.hint}</span>` : ''}</div>
+  row.innerHTML = `<div class="lbl"><label for="${o.id}">${o.label}${o.help ? `<button type="button" class="qi" data-help="${o.help}">?</button>` : ''}</label>${o.hint ? `<span class="hint">${o.hint}</span>` : ''}</div>
     <div class="ctl"><input type="range" id="${o.id}-r" aria-label="${o.label}"><input type="number" id="${o.id}"><span class="u"></span></div>`;
   parent.appendChild(row);
   const r = row.querySelector('input[type=range]'), n = row.querySelector('input[type=number]'), u = row.querySelector('.u');
@@ -1068,15 +1092,15 @@ function slider(parent, o) {
   return c;
 }
 
-slider($('boxFields'), { id: 'sx', label: 'Length X', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[0], set: (v) => (S.size[0] = v) });
-slider($('boxFields'), { id: 'sy', label: 'Width Y', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[1], set: (v) => (S.size[1] = v) });
-slider($('boxFields'), { id: 'sz', label: 'Height Z', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[2], set: (v) => (S.size[2] = v) });
-slider($('sphereFields'), { id: 'rad', label: 'Radius', len: true, min: 1, max: 75, hardMax: 250, step: 0.5, stepIn: 0.01, get: () => S.radius, set: (v) => (S.radius = v) });
-slider($('cellFields'), { id: 'cells', label: 'Number of cells', int: true, min: 2, max: 600, hardMax: 2000, step: 1, get: () => S.cells, set: (v) => (S.cells = v) });
-slider($('cellFields'), { id: 'minCell', label: 'Min cell size', hint: 'cube edge, 0 = off', len: true, min: 0, max: 20, hardMax: 100, step: 0.1, stepIn: 0.005, get: () => S.minCell, set: (v) => (S.minCell = v) });
-slider($('cellFields'), { id: 'relax', label: 'Relaxation', hint: '0 = fully random', int: true, min: 0, max: 8, step: 1, get: () => S.relax, set: (v) => (S.relax = v), unitText: 'it' });
-slider($('strutFields'), { id: 'thick', label: 'Strut thickness', hint: 'diameter', len: true, min: 0.1, max: 4, hardMax: 20, step: 0.05, stepIn: 0.001, get: () => S.thickness, set: (v) => (S.thickness = v) });
-slider($('strutFields'), { id: 'fillet', label: 'Node fillet', hint: '% of thickness', min: 0, max: 100, step: 1, get: () => S.fillet, set: (v) => (S.fillet = v), unitText: '%' });
+slider($('boxFields'), { id: 'sx', help: 'box', label: 'Length X', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[0], set: (v) => (S.size[0] = v) });
+slider($('boxFields'), { id: 'sy', help: 'box', label: 'Width Y', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[1], set: (v) => (S.size[1] = v) });
+slider($('boxFields'), { id: 'sz', help: 'box', label: 'Height Z', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[2], set: (v) => (S.size[2] = v) });
+slider($('sphereFields'), { id: 'rad', help: 'radius', label: 'Radius', len: true, min: 1, max: 75, hardMax: 250, step: 0.5, stepIn: 0.01, get: () => S.radius, set: (v) => (S.radius = v) });
+slider($('cellFields'), { id: 'cells', help: 'cells', label: 'Number of cells', int: true, min: 2, max: 600, hardMax: 2000, step: 1, get: () => S.cells, set: (v) => (S.cells = v) });
+slider($('cellFields'), { id: 'minCell', help: 'minCell', label: 'Min cell size', hint: 'cube edge, 0 = off', len: true, min: 0, max: 20, hardMax: 100, step: 0.1, stepIn: 0.005, get: () => S.minCell, set: (v) => (S.minCell = v) });
+slider($('cellFields'), { id: 'relax', help: 'relax', label: 'Relaxation', hint: '0 = fully random', int: true, min: 0, max: 8, step: 1, get: () => S.relax, set: (v) => (S.relax = v), unitText: 'it' });
+slider($('strutFields'), { id: 'thick', help: 'thick', label: 'Strut thickness', hint: 'diameter', len: true, min: 0.1, max: 4, hardMax: 20, step: 0.05, stepIn: 0.001, get: () => S.thickness, set: (v) => (S.thickness = v) });
+slider($('strutFields'), { id: 'fillet', help: 'fillet', label: 'Node fillet', hint: '% of thickness', min: 0, max: 100, step: 1, get: () => S.fillet, set: (v) => (S.fillet = v), unitText: '%' });
 
 function radios(name, key, after) {
   document.querySelectorAll(`input[name=${name}]`).forEach((el) => el.addEventListener('change', () => {
@@ -1102,31 +1126,79 @@ function fillRes() {
 fillRes();
 $('meshRes').addEventListener('change', (e) => { S.meshRes = +e.target.value; updateExport(); if (S.viewMesh) scheduleMesh(); });
 $('viewMesh').addEventListener('change', (e) => { S.viewMesh = e.target.checked; applyVisibility(); if (S.viewMesh && !meshIsCurrent()) scheduleMesh(0); });
-$('wire').addEventListener('change', (e) => { S.wire = e.target.checked; matMesh.wireframe = S.wire; matStrut.wireframe = S.wire; });
+$('wire').addEventListener('change', (e) => { S.wire = e.target.checked; matMesh.wireframe = S.wire; matStrut.wireframe = S.wire; matFlare.wireframe = S.wire; });
+const HELP = {
+  units: 'Unit for every length on this page. Switching converts the numbers; the lattice itself does not change.',
+  shape: 'The outer solid the lattice fills. Box: set length, width and height. Sphere: set the radius. The Voronoi cells are cut by this shape, and the cut adds a cage of struts on its surface.',
+  box: 'Outer size of the box along this axis. With the Rounded outer surface the finished part measures exactly this.',
+  radius: 'Outer radius of the sphere. The finished part fits inside a sphere of this radius.',
+  cells: 'How many Voronoi cells (seed points) to place. More cells give smaller pores and more struts. A large minimum cell size can lower the number that actually fits.',
+  minCell: 'Smallest cell allowed, given as the edge of a cube. Seed points stay at least this far apart, and at least half of it from the outer surface, so every cell holds a sphere this wide. Raise it if small cells fuse shut when printed. 0 turns it off.',
+  relax: 'Lloyd relaxation steps. Each step moves every seed to the centre of its cell, so cells become more even in size and shape. 0 keeps the fully random layout.',
+  seed: 'Number that drives the random layout. The same seed with the same settings always gives the same lattice. New seed picks a random one.',
+  thick: 'Diameter of every strut.',
+  fillet: 'Rounds the joints where struts meet, as a percentage of the strut thickness. 0 gives sharp joints, 100 gives large smooth blends. Fillets add material, so relative density goes up. The live preview approximates the shape; the processed mesh is exact.',
+  boundary: 'How struts meet the outer surface. Rounded: outer struts sit just inside the surface, so the part measures exactly the set size and its edges are round like the struts. Flat cut: outer struts are centred on the surface and then trimmed flush, so the outer faces are flat. Use Flat cut when the part must sit flat, for example between compression test plates.',
+  surface: 'On: struts run along the outer surface and form a closed cage. Off: those struts are removed and the cells stay open at the surface.',
+  meshres: 'Voxel size used to turn the struts into triangles. Smaller is smoother and more accurate, but slower and gives bigger files. A good starting point is about a sixth of the strut thickness, or finer.',
+  mesh: 'View mesh shows the real solid instead of the strut preview. While you change settings it may use a coarser grid to stay quick. Wireframe shows the triangle edges. Process mesh builds the mesh at the chosen resolution, which is needed before downloading.',
+  export: 'Download the processed mesh as a file for printing or CAD.',
+  format: 'STL is the usual format for 3D printing slicers. OBJ opens in most modelling tools and is a text file.',
+  xunits: 'Units of the coordinates written to the file. Most slicers expect millimetres.',
+};
+document.querySelectorAll('.qi').forEach((btn) => {
+  const key = btn.dataset.help;
+  btn.setAttribute('aria-label', 'Explain this setting');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const host = btn.closest('.row, .tabline');
+    let p = host.nextElementSibling;
+    if (p && p.classList.contains('explain') && p.dataset.for === key) {
+      p.remove(); btn.setAttribute('aria-expanded', 'false'); return;
+    }
+    p = document.createElement('p');
+    p.className = 'explain'; p.dataset.for = key; p.textContent = HELP[key] || '';
+    host.after(p); btn.setAttribute('aria-expanded', 'true');
+  });
+});
 $('helpBtn').addEventListener('click', () => { const h = $('help'); h.hidden = !h.hidden; $('helpBtn').setAttribute('aria-expanded', String(!h.hidden)); });
 
 // ---------------- three.js scene ----------------
 const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(3, 5, 4); scene.add(key);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x80808a, 1.5));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(3, 5, 4);
+const fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(-4, -1, -3);
+
 const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 5000);
+camera.add(key, fill); scene.add(camera);
 camera.position.set(45, 32, 55);
 const orbit = new OrbitControls(camera, canvas);
 orbit.enableDamping = true; orbit.dampingFactor = 0.09;
 
 const root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root); // lattice Z is up
-const matStrut = new THREE.MeshStandardMaterial({ color: 0xd6d7dc, metalness: 0.88, roughness: 0.3 });
-const matMesh = new THREE.MeshStandardMaterial({ color: 0xd6d7dc, metalness: 0.88, roughness: 0.3 });
+const matStrut = new THREE.MeshStandardMaterial({ color: 0xd2d2d6, metalness: 0, roughness: 0.75 });
+const matFlare = new THREE.MeshStandardMaterial({ color: 0xd2d2d6, metalness: 0, roughness: 0.75, side: THREE.DoubleSide });
+const matMesh = new THREE.MeshStandardMaterial({ color: 0xd2d2d6, metalness: 0, roughness: 0.75 });
 const matOutline = new THREE.LineBasicMaterial({ color: 0x9a9aa2, transparent: true, opacity: 0.55 });
 const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 14, 1, true);
 const sphGeo = new THREE.SphereGeometry(1, 16, 12);
 let cylIM = null, sphIM = null, meshObj = null, outline = null;
+// Fillet preview: a flared sleeve at each strut end, shaped to match the smooth-union mesh
+// (excess radius ~ A*exp(-(s/lambda)^2), fitted to the exact SDF for 3- and 4-strut nodes).
+const flare = { 3: null, 4: null };
+let flareGeoKey = '';
+function flareParams(f) {
+  return { a3: 0.55 * f, a4: 0.82 * Math.pow(f, 0.75), lam: 0.73 * Math.pow(f, 0.7) };
+}
+function flareGeo(a) {
+  const pts = [];
+  for (let i = 0; i <= 28; i++) { const u = (2.2 * i) / 28; pts.push(new THREE.Vector2(1 + a * Math.exp(-u * u), u)); }
+  return new THREE.LatheGeometry(pts, 16);
+}
 
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
@@ -1237,15 +1309,54 @@ function drawSkeleton() {
     cylIM.setMatrixAt(i, m4);
   }
   cylIM.count = nE; cylIM.instanceMatrix.needsUpdate = true;
-  const fr = r * (1 + 0.45 * params.fillet);
+  const f = params.fillet, fp = flareParams(f);
   for (let i = 0; i < nV; i++) {
     a.fromArray(V, 3 * i);
-    const rr = deg[i] > 2 ? fr : r;
+    const ex = f > 0 && deg[i] >= 3 ? (deg[i] >= 4 ? fp.a4 : fp.a3) * 0.9 : 0;
+    const rr = r * (1 + ex);
     m4.compose(a, q.identity(), s.set(rr, rr, rr));
     sphIM.setMatrixAt(i, m4);
   }
   sphIM.count = nV; sphIM.instanceMatrix.needsUpdate = true;
   cylIM.computeBoundingSphere(); sphIM.computeBoundingSphere();
+
+  // flared sleeves at strut ends
+  const gk = f.toFixed(3);
+  if (gk !== flareGeoKey) {
+    flareGeoKey = gk;
+    for (const kk of [3, 4]) {
+      if (flare[kk]) { root.remove(flare[kk]); flare[kk].geometry.dispose(); flare[kk] = null; }
+    }
+  }
+  for (const kk of [3, 4]) {
+    const need = 2 * nE;
+    if (f > 0 && (!flare[kk] || flare[kk].instanceMatrix.count < need)) {
+      if (flare[kk]) { root.remove(flare[kk]); flare[kk].geometry.dispose(); }
+      flare[kk] = new THREE.InstancedMesh(flareGeo(kk === 3 ? fp.a3 : fp.a4), matFlare, Math.max(need * 1.5 | 0, 64));
+      root.add(flare[kk]);
+    }
+  }
+  if (f > 0) {
+    const cnt = { 3: 0, 4: 0 };
+    const lam = fp.lam * params.thickness;
+    for (let i = 0; i < nE; i++) {
+      const ia = E[2 * i], ib = E[2 * i + 1];
+      a.fromArray(V, 3 * ia); b.fromArray(V, 3 * ib);
+      const L = a.distanceTo(b);
+      const len = Math.min(lam, (0.5 * L) / 2.2);
+      for (const [p0, p1, n0] of [[a, b, ia], [b, a, ib]]) {
+        if (deg[n0] < 3) continue;
+        const kk = deg[n0] >= 4 ? 4 : 3;
+        d.subVectors(p1, p0).normalize();
+        q.setFromUnitVectors(up, d);
+        m4.compose(p0, q, s.set(r, len, r));
+        flare[kk].setMatrixAt(cnt[kk]++, m4);
+      }
+    }
+    for (const kk of [3, 4]) { flare[kk].count = cnt[kk]; flare[kk].instanceMatrix.needsUpdate = true; flare[kk].computeBoundingSphere(); }
+  } else {
+    for (const kk of [3, 4]) if (flare[kk]) flare[kk].count = 0;
+  }
 }
 
 function meshIsCurrent() { return displayed && sk && displayed.key === sk.key; }
@@ -1313,6 +1424,7 @@ function applyVisibility() {
   if (meshObj) meshObj.visible = !!showM;
   if (cylIM) cylIM.visible = !showM;
   if (sphIM) sphIM.visible = !showM;
+  for (const kk of [3, 4]) if (flare[kk]) flare[kk].visible = !showM;
   const hint = $('meshHint');
   if (!S.viewMesh) hint.textContent = 'Preview shows struts only. Tick View mesh to see the solid.';
   else if (displayed && meshIsCurrent()) hint.textContent = displayed.final
