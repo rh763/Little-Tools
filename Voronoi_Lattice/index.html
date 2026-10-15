@@ -1,0 +1,1472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voronoi Lattice Generator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Design stochastic Voronoi strut lattices in a box or sphere and export them as STL or OBJ.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=PT+Sans:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: fixed header, left control column (black tab sections), 3D viewport fills the rest. */
+:root {
+  --paper: #ffffff;
+  --paper-2: #e3e3e6;
+  --ink: #141416;
+  --muted: #6c6c73;
+  --rule: #b8b8be;
+  --tab: #141416;
+  --tab-ink: #ffffff;
+  --signal: #f3e500;
+  --warn: #a8430f;
+  --font-logo: "Doto", "Courier New", monospace;
+  --font-ui: "PT Sans", "Trebuchet MS", Arial, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 35%, var(--paper-2) 100%);
+  color: var(--ink);
+  font: 13px/1.35 var(--font-ui);
+  overflow: hidden;
+}
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-block: 10px 6px;
+}
+.logo {
+  font: 900 26px/1 var(--font-logo); letter-spacing: 0.02em; margin: 0; white-space: nowrap;
+}
+.logo small { font-weight: 700; font-size: 26px; color: var(--muted); }
+.head-links { display: flex; gap: 2px; align-items: stretch; }
+.head-links button {
+  font: 700 12px var(--font-ui); text-transform: lowercase; border: 0; cursor: pointer;
+  background: transparent; color: var(--ink); padding: 8px 12px;
+}
+.head-links button.help { background: var(--signal); }
+.head-links button:focus-visible { outline: 2px solid var(--ink); }
+
+main { display: grid; grid-template-columns: 300px 1fr; gap: 20px; min-height: 0; }
+
+/* ---------- sidebar ---------- */
+.side {
+  overflow-y: auto; min-height: 0; padding-block: 6px 24px; padding-right: 6px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.intro { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; max-width: 34ch; }
+section.group { display: flex; flex-direction: column; gap: 9px; }
+.tab {
+  align-self: flex-start; background: var(--tab); color: var(--tab-ink);
+  font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 6px 9px; margin: 0;
+}
+.row { display: flex; flex-direction: column; gap: 3px; }
+.row > .lbl {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.lbl .hint { text-transform: none; letter-spacing: 0; color: var(--muted); }
+.ctl { display: grid; grid-template-columns: 1fr 74px 26px; gap: 6px; align-items: center; }
+.ctl .u { font: 11px var(--font-num); color: var(--muted); }
+input[type=number], select {
+  width: 100%; font: 12px var(--font-num); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 0; padding: 3px 5px; height: 24px;
+  font-variant-numeric: tabular-nums;
+}
+input[type=number]:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: -1px; }
+input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 0;
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 0; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 9px; height: 16px; background: #8d8d94; border: 0; border-radius: 0;
+}
+input[type=range]::-moz-range-thumb { width: 9px; height: 16px; background: #8d8d94; border: 0; border-radius: 0; }
+input[type=range]:hover::-webkit-slider-thumb { background: var(--ink); }
+input[type=range]:hover::-moz-range-thumb { background: var(--ink); }
+input[type=range]:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.hint-line { font-size: 11px; color: var(--muted); margin: -2px 0 0; }
+.note { font-size: 11px; color: var(--warn); margin: 0; }
+.trio { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+
+/* X-style checkboxes */
+.checks { display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.chk { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; user-select: none; }
+.chk input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chk .box { width: 14px; height: 14px; border: 1px solid var(--ink); background: var(--paper); position: relative; flex: none; }
+.chk input:checked + .box::before, .chk input:checked + .box::after {
+  content: ""; position: absolute; left: 6px; top: -1px; width: 1.5px; height: 15px; background: var(--ink);
+}
+.chk input:checked + .box::before { transform: rotate(45deg); }
+.chk input:checked + .box::after { transform: rotate(-45deg); }
+.chk input:focus-visible + .box { outline: 2px solid var(--ink); outline-offset: 2px; }
+.chk input:disabled ~ * { opacity: 0.4; }
+
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+button.b {
+  font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: 0.06em;
+  background: var(--paper); color: var(--ink); border: 1px solid var(--ink); border-radius: 0;
+  padding: 8px 6px; cursor: pointer;
+}
+button.b:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+button.b.go { background: var(--signal); border-color: var(--ink); }
+button.b.go:hover:not(:disabled) { background: var(--ink); color: var(--signal); }
+button.b:disabled { opacity: 0.38; cursor: not-allowed; }
+button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.seedrow { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.seedrow button.b { padding: 4px 10px; }
+.stats { font: 11px/1.6 var(--font-num); font-variant-numeric: tabular-nums; margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0 12px; }
+.stats dt { color: var(--muted); text-transform: uppercase; font-family: var(--font-ui); letter-spacing: 0.04em; }
+.stats dd { margin: 0; text-align: right; }
+
+/* ---------- viewport ---------- */
+.view { position: relative; min-height: 0; min-width: 0; }
+#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+.vtop { position: absolute; top: 8px; right: 8px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.vbtn {
+  background: var(--tab); color: var(--tab-ink); border: 0; cursor: pointer;
+  font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 10px;
+}
+.vbtn:focus-visible { outline: 2px solid var(--signal); }
+.status {
+  position: absolute; left: 8px; top: 8px; font: 11px/1.5 var(--font-num); color: var(--muted);
+  max-width: 60%; pointer-events: none;
+}
+.status b { color: var(--ink); font-weight: 500; }
+.dims {
+  position: absolute; right: 12px; bottom: 12px; font: 12px var(--font-num); color: var(--ink);
+  display: flex; align-items: center; gap: 8px; pointer-events: none;
+}
+.dims::before { content: ""; width: 34px; height: 9px; border: 1px solid var(--ink); border-top: 0; }
+.progress { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: transparent; }
+.progress span { display: block; height: 100%; width: 0; background: var(--ink); transition: width 0.15s linear; }
+.busy { position: absolute; left: 8px; bottom: 12px; font: 11px var(--font-num); color: var(--ink); background: var(--signal); padding: 3px 7px; }
+.err { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 360px; background: var(--paper); border: 1px solid var(--ink); padding: 12px 14px; font-size: 13px; }
+
+.help-panel {
+  position: absolute; right: 8px; top: 40px; width: min(380px, calc(100% - 16px));
+  max-height: calc(100% - 56px); overflow-y: auto;
+  background: var(--paper); border: 1px solid var(--ink); padding: 14px 16px; font-size: 12.5px; line-height: 1.5;
+}
+.help-panel h2 { font: 700 11px var(--font-ui); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 6px; }
+.help-panel p { margin: 0 0 9px; }
+
+@media (max-width: 760px) {
+  body { overflow: auto; }
+  .app { height: auto; }
+  main { grid-template-columns: 1fr; }
+  .view { order: -1; height: 62vh; min-height: 320px; }
+  .side { overflow: visible; padding-right: 0; }
+  .logo, .logo small { font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) { .progress span { transition: none; } }
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <header>
+    <h1 class="logo">voronoi lattice <small>generator</small></h1>
+    <div class="head-links">
+      <button type="button" class="help" id="helpBtn" aria-expanded="false">help</button>
+    </div>
+  </header>
+  <main>
+    <aside class="side" id="side" aria-label="Lattice parameters">
+      <p class="intro">Design a stochastic Voronoi strut lattice. Change a value and the preview updates. Process the mesh when you are happy, then download it.</p>
+
+      <section class="group">
+        <h2 class="tab">Units</h2>
+        <div class="checks" role="radiogroup" aria-label="Length units">
+          <label class="chk"><input type="radio" name="unit" value="mm" id="unit-mm" checked><span class="box"></span><span>mm</span></label>
+          <label class="chk"><input type="radio" name="unit" value="in" id="unit-in"><span class="box"></span><span>inch</span></label>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2 class="tab">Solid geometry</h2>
+        <div class="checks" role="radiogroup" aria-label="Solid shape">
+          <label class="chk"><input type="radio" name="shape" value="box" id="shape-box" checked><span class="box"></span><span>Box</span></label>
+          <label class="chk"><input type="radio" name="shape" value="sphere" id="shape-sphere"><span class="box"></span><span>Sphere</span></label>
+        </div>
+        <div id="boxFields" class="group"></div>
+        <div id="sphereFields" class="group" hidden></div>
+      </section>
+
+      <section class="group">
+        <h2 class="tab">Cells</h2>
+        <div id="cellFields" class="group"></div>
+        <p class="note" id="fitNote" hidden></p>
+        <div class="row">
+          <div class="lbl"><label for="seed">Random seed</label><span class="hint">same seed, same lattice</span></div>
+          <div class="seedrow">
+            <input type="number" id="seed" min="0" max="999999" step="1" value="42">
+            <button type="button" class="b" id="newSeed">New seed</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2 class="tab">Struts</h2>
+        <div id="strutFields" class="group"></div>
+        <div class="row">
+          <div class="lbl"><span>Outer surface</span></div>
+          <div class="checks" role="radiogroup" aria-label="Outer surface">
+            <label class="chk"><input type="radio" name="boundary" value="inset" id="bd-inset" checked><span class="box"></span><span>Rounded</span></label>
+            <label class="chk"><input type="radio" name="boundary" value="clip" id="bd-clip"><span class="box"></span><span>Flat cut</span></label>
+          </div>
+        </div>
+        <label class="chk"><input type="checkbox" id="surface" checked><span class="box"></span><span>Struts on outer surface</span></label>
+      </section>
+
+      <section class="group">
+        <h2 class="tab">Mesh</h2>
+        <div class="row">
+          <div class="lbl"><label for="meshRes">Mesh resolution</label><span class="hint">voxel size</span></div>
+          <select id="meshRes"></select>
+        </div>
+        <div class="checks">
+          <label class="chk"><input type="checkbox" id="viewMesh"><span class="box"></span><span>View mesh</span></label>
+          <label class="chk"><input type="checkbox" id="wire"><span class="box"></span><span>Wireframe</span></label>
+        </div>
+        <p class="hint-line" id="meshHint">Preview shows struts only. Tick View mesh to see the solid.</p>
+        <button type="button" class="b go" id="process">Process mesh</button>
+      </section>
+
+      <section class="group">
+        <h2 class="tab">Export</h2>
+        <div class="trio">
+          <div class="row">
+            <div class="lbl"><span>Format</span></div>
+            <div class="checks" role="radiogroup" aria-label="File format">
+              <label class="chk"><input type="radio" name="fmt" value="stl" id="fmt-stl" checked><span class="box"></span><span>STL</span></label>
+              <label class="chk"><input type="radio" name="fmt" value="obj" id="fmt-obj"><span class="box"></span><span>OBJ</span></label>
+            </div>
+          </div>
+          <div class="row">
+            <div class="lbl"><span>File units</span></div>
+            <div class="checks" role="radiogroup" aria-label="File units">
+              <label class="chk"><input type="radio" name="xu" value="mm" id="xu-mm" checked><span class="box"></span><span>mm</span></label>
+              <label class="chk"><input type="radio" name="xu" value="in" id="xu-in"><span class="box"></span><span>in</span></label>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="b" id="download" disabled>Download</button>
+        <p class="hint-line" id="dlHint">Process the mesh first.</p>
+        <dl class="stats" id="stats"></dl>
+      </section>
+    </aside>
+
+    <div class="view" id="view">
+      <canvas id="gl" tabindex="0" aria-label="3D preview. Drag to rotate, scroll or pinch to zoom, right-drag to pan."></canvas>
+      <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="vtop">
+        <button type="button" class="vbtn" id="fit">Fit view</button>
+      </div>
+      <div class="busy" id="busy" hidden></div>
+      <div class="err" id="err" role="alert" hidden></div>
+      <div class="dims" id="dims"></div>
+      <div class="help-panel" id="help" hidden>
+        <h2>How it works</h2>
+        <p>Random seed points are scattered inside the solid and split space into Voronoi cells. Every cell edge becomes a round strut, and the cells are cut by the outer surface, which adds a cage of struts on the outside.</p>
+        <p><b>Min cell size</b> keeps seed points at least this far apart, so every cell holds a sphere of that diameter. Use it to stop small cells from fusing shut when printed. If the requested number of cells does not fit, fewer cells are placed.</p>
+        <p><b>Relaxation</b> nudges the cells toward equal size. 0 is fully random.</p>
+        <p><b>Node fillet</b> blends struts into each other at the nodes. It is a percentage of the strut thickness.</p>
+        <p><b>Rounded</b> keeps strut surfaces inside the outer dimensions with round edges. <b>Flat cut</b> centres the outer struts on the surface and trims them flush.</p>
+        <p><b>Mesh resolution</b> is the voxel size used to build the triangle mesh. The live mesh preview uses a coarser grid when needed. Process mesh builds it at the chosen resolution, ready to download.</p>
+        <h2>Viewer</h2>
+        <p>Drag to rotate. Scroll or pinch to zoom. Right-drag or two-finger drag to pan.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="text/plain" id="worker-src">
+// ===== Voronoi lattice core (no DOM) =====================================
+// All lengths in mm. Solid is centered at the origin.
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const v3 = {
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  mul: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  len: (a) => Math.hypot(a[0], a[1], a[2]),
+  norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+};
+
+// ---------- domain (where strut axes live) ----------
+function makeDomain(p) {
+  const inset = p.boundary === 'inset' ? p.thickness / 2 : 0;
+  if (p.shape === 'box') {
+    const h = p.size.map((s) => s / 2 - inset);
+    if (h.some((x) => x <= 0)) throw new Error('Box is too small for this strut thickness.');
+    return { shape: 'box', lo: h.map((x) => -x), hi: h.slice(), scale: Math.max(...h) };
+  }
+  const R = p.radius - inset;
+  if (R <= 0) throw new Error('Sphere is too small for this strut thickness.');
+  return { shape: 'sphere', R, lo: [-R, -R, -R], hi: [R, R, R], scale: R };
+}
+
+function domSample(dom, rng, margin) {
+  if (dom.shape === 'box') {
+    const p = [];
+    for (let i = 0; i < 3; i++) {
+      const lo = dom.lo[i] + margin, hi = dom.hi[i] - margin;
+      p.push(hi > lo ? lo + rng() * (hi - lo) : (dom.lo[i] + dom.hi[i]) / 2);
+    }
+    return p;
+  }
+  const R = Math.max(dom.R - margin, 0);
+  for (;;) {
+    const p = [(rng() * 2 - 1) * R, (rng() * 2 - 1) * R, (rng() * 2 - 1) * R];
+    if (v3.dot(p, p) <= R * R) return p;
+  }
+}
+
+function domProject(dom, p, margin) {
+  if (dom.shape === 'box') {
+    return p.map((x, i) => {
+      let lo = dom.lo[i] + margin, hi = dom.hi[i] - margin;
+      if (hi < lo) lo = hi = (dom.lo[i] + dom.hi[i]) / 2;
+      return Math.min(Math.max(x, lo), hi);
+    });
+  }
+  const R = Math.max(dom.R - margin, 0), l = v3.len(p);
+  return l > R ? v3.mul(p, R / Math.max(l, 1e-12)) : p;
+}
+
+// ---------- seeds ----------
+function poissonSeeds(dom, n, minDist, rng) {
+  if (!(minDist > 0)) {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(domSample(dom, rng, 0));
+    return { seeds: out, fitted: n };
+  }
+  const cs = minDist, grid = new Map(), out = [];
+  const key = (a, b, c) => a + ',' + b + ',' + c;
+  const maxAttempts = Math.min(3000 * n, 300000);
+  const d2 = minDist * minDist;
+  for (let at = 0; at < maxAttempts && out.length < n; at++) {
+    const p = domSample(dom, rng, minDist / 2);
+    const gx = Math.floor(p[0] / cs), gy = Math.floor(p[1] / cs), gz = Math.floor(p[2] / cs);
+    let ok = true;
+    for (let a = -1; a <= 1 && ok; a++) for (let b = -1; b <= 1 && ok; b++) for (let c = -1; c <= 1 && ok; c++) {
+      const L = grid.get(key(gx + a, gy + b, gz + c));
+      if (L) for (const q of L) { const d = v3.sub(p, q); if (v3.dot(d, d) < d2) { ok = false; break; } }
+    }
+    if (!ok) continue;
+    out.push(p);
+    const k = key(gx, gy, gz);
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(p);
+  }
+  return { seeds: out, fitted: out.length };
+}
+
+function enforceSpacing(dom, pts, minDist, iters = 60) {
+  if (!(minDist > 0) || pts.length < 2) return pts;
+  for (let it = 0; it < iters; it++) {
+    let moved = false;
+    const delta = pts.map(() => [0, 0, 0]);
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+      const d = v3.sub(pts[j], pts[i]), L = v3.len(d);
+      if (L < minDist * 0.999) {
+        const u = L > 1e-9 ? v3.mul(d, 1 / L) : [1, 0, 0];
+        const push = v3.mul(u, (minDist - L) * 0.505);
+        delta[i] = v3.sub(delta[i], push); delta[j] = v3.add(delta[j], push); moved = true;
+      }
+    }
+    if (!moved) break;
+    pts = pts.map((p, i) => domProject(dom, v3.add(p, delta[i]), minDist / 2));
+  }
+  return pts;
+}
+
+// ---------- convex polyhedron clipping ----------
+function boxPoly(lo, hi, tagFn) {
+  const V = [];
+  for (let i = 0; i < 8; i++) V.push([i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2]]);
+  const F = [
+    { idx: [0, 2, 6, 4], tag: tagFn(0) }, { idx: [1, 5, 7, 3], tag: tagFn(1) },
+    { idx: [0, 4, 5, 1], tag: tagFn(2) }, { idx: [2, 3, 7, 6], tag: tagFn(3) },
+    { idx: [0, 1, 3, 2], tag: tagFn(4) }, { idx: [4, 6, 7, 5], tag: tagFn(5) },
+  ];
+  return { V, F };
+}
+
+function clipPoly(poly, n, d, tag, eps) {
+  const { V, F } = poly;
+  const s = V.map((v) => v3.dot(n, v) - d);
+  let anyOut = false, anyIn = false;
+  for (const x of s) { if (x > eps) anyOut = true; else anyIn = true; }
+  if (!anyOut) return poly;
+  if (!anyIn) return null;
+  const NV = [], map = new Array(V.length).fill(-1), emap = new Map(), cap = [];
+  for (let i = 0; i < V.length; i++) if (s[i] <= eps) { map[i] = NV.length; NV.push(V[i]); if (Math.abs(s[i]) <= eps) cap.push(map[i]); }
+  const cross = (a, b) => {
+    const k = a < b ? a + '_' + b : b + '_' + a;
+    if (emap.has(k)) return emap.get(k);
+    const t = s[a] / (s[a] - s[b]);
+    const p = v3.add(V[a], v3.mul(v3.sub(V[b], V[a]), t));
+    const id = NV.length; NV.push(p); emap.set(k, id); cap.push(id);
+    return id;
+  };
+  const NF = [];
+  for (const f of F) {
+    const out = [], L = f.idx.length;
+    for (let k = 0; k < L; k++) {
+      const a = f.idx[k], b = f.idx[(k + 1) % L];
+      const ia = s[a] <= eps, ib = s[b] <= eps;
+      if (ia) out.push(map[a]);
+      if (ia !== ib) out.push(cross(a, b));
+    }
+    const clean = out.filter((v, i) => v !== out[(i + 1) % out.length]);
+    if (clean.length >= 3) NF.push({ idx: clean, tag: f.tag });
+  }
+  const capU = [...new Set(cap)];
+  if (capU.length >= 3) {
+    const c = capU.reduce((acc, i) => v3.add(acc, NV[i]), [0, 0, 0]).map((x) => x / capU.length);
+    const u = v3.norm(v3.cross(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+    const w = v3.cross(n, u);
+    capU.sort((a, b) => {
+      const da = v3.sub(NV[a], c), db = v3.sub(NV[b], c);
+      return Math.atan2(v3.dot(da, w), v3.dot(da, u)) - Math.atan2(v3.dot(db, w), v3.dot(db, u));
+    });
+    NF.push({ idx: capU, tag });
+  }
+  // compact
+  const used = new Array(NV.length).fill(-1), CV = [];
+  for (const f of NF) f.idx = f.idx.map((i) => { if (used[i] < 0) { used[i] = CV.length; CV.push(NV[i]); } return used[i]; });
+  return { V: CV, F: NF };
+}
+
+function voronoiCells(seeds, dom) {
+  const n = seeds.length, eps = 1e-9 * dom.scale;
+  const cells = [];
+  const boxTag = dom.shape === 'box' ? (i) => -1 - i : () => -10;
+  for (let i = 0; i < n; i++) {
+    const si = seeds[i];
+    let poly = boxPoly(dom.lo, dom.hi, boxTag);
+    const order = [];
+    for (let j = 0; j < n; j++) if (j !== i) order.push([v3.len(v3.sub(seeds[j], si)), j]);
+    order.sort((a, b) => a[0] - b[0]);
+    let maxR = Math.max(...poly.V.map((v) => v3.len(v3.sub(v, si))));
+    for (const [dist, j] of order) {
+      if (dist / 2 > maxR) break;
+      if (dist < 1e-12) continue;
+      const nrm = v3.mul(v3.sub(seeds[j], si), 1 / dist);
+      const d = v3.dot(nrm, v3.mul(v3.add(si, seeds[j]), 0.5));
+      const np = clipPoly(poly, nrm, d, j, eps);
+      if (!np) { poly = null; break; }
+      if (np !== poly) { poly = np; maxR = Math.max(...poly.V.map((v) => v3.len(v3.sub(v, si)))); }
+    }
+    cells.push(poly);
+  }
+  return cells;
+}
+
+function polyCentroid(poly) {
+  const c0 = poly.V.reduce((a, v) => v3.add(a, v), [0, 0, 0]).map((x) => x / poly.V.length);
+  let vol = 0, acc = [0, 0, 0];
+  for (const f of poly.F) {
+    const a = poly.V[f.idx[0]];
+    for (let k = 1; k + 1 < f.idx.length; k++) {
+      const b = poly.V[f.idx[k]], c = poly.V[f.idx[k + 1]];
+      const v = Math.abs(v3.dot(v3.sub(a, c0), v3.cross(v3.sub(b, c0), v3.sub(c, c0)))) / 6;
+      vol += v;
+      acc = v3.add(acc, v3.mul(v3.add(v3.add(a, b), v3.add(c, c0)), v / 4));
+    }
+  }
+  return vol > 0 ? v3.mul(acc, 1 / vol) : c0;
+}
+
+// ---------- sphere helpers ----------
+function clipSegBall(a, b, R) {
+  const d = v3.sub(b, a);
+  const A = v3.dot(d, d), B = 2 * v3.dot(a, d), C = v3.dot(a, a) - R * R;
+  const disc = B * B - 4 * A * C;
+  if (A < 1e-18 || disc <= 0) return null;
+  const s = Math.sqrt(disc);
+  const t0 = Math.max((-B - s) / (2 * A), 0), t1 = Math.min((-B + s) / (2 * A), 1);
+  if (t1 - t0 <= 1e-9) return null;
+  return [v3.add(a, v3.mul(d, t0)), v3.add(a, v3.mul(d, t1))];
+}
+
+function sphereArcs(poly, nrm, h, R, segLen) {
+  if (Math.abs(h) >= R) return [];
+  const c = v3.mul(nrm, h), rho = Math.sqrt(R * R - h * h);
+  const u = v3.norm(v3.cross(nrm, Math.abs(nrm[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+  const w = v3.cross(nrm, u);
+  let P = poly.map((p) => { const d = v3.sub(p, c); return [v3.dot(d, u), v3.dot(d, w)]; });
+  let area = 0;
+  for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; area += a[0] * b[1] - b[0] * a[1]; }
+  if (area < 0) P = P.reverse();
+  const inside = (th) => {
+    const x = rho * Math.cos(th), y = rho * Math.sin(th);
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i], b = P[(i + 1) % P.length];
+      if ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]) < -1e-12) return false;
+    }
+    return true;
+  };
+  const N = 360, step = (2 * Math.PI) / N;
+  const ins = []; let any = false, all = true;
+  for (let i = 0; i < N; i++) { ins.push(inside(i * step)); any = any || ins[i]; all = all && ins[i]; }
+  if (!any) return [];
+  const refine = (tIn, tOut) => {
+    for (let k = 0; k < 40; k++) { const m = 0.5 * (tIn + tOut); if (inside(m)) tIn = m; else tOut = m; }
+    return tIn;
+  };
+  const runs = [];
+  if (all) runs.push([0, 2 * Math.PI, true]);
+  else {
+    let start = ins.indexOf(false);
+    let k = 0;
+    while (k < N) {
+      const idx = (start + k) % N;
+      if (ins[idx]) {
+        let j = k;
+        while (j + 1 < N && ins[(start + j + 1) % N]) j++;
+        const ta = (start + k) * step, tb = (start + j) * step;
+        runs.push([refine(ta, ta - step), refine(tb, tb + step), false]);
+        k = j + 1;
+      } else k++;
+    }
+  }
+  const segs = [];
+  for (const [a, b, closed] of runs) {
+    const L = rho * (b - a);
+    const ns = Math.max(Math.ceil(L / segLen), closed ? 3 : 1);
+    let prev = null;
+    for (let i = 0; i <= ns; i++) {
+      const t = a + ((b - a) * i) / ns;
+      const p = v3.add(c, v3.add(v3.mul(u, rho * Math.cos(t)), v3.mul(w, rho * Math.sin(t))));
+      if (prev) segs.push([prev, p]);
+      prev = p;
+    }
+  }
+  return segs;
+}
+
+// ---------- graph ----------
+function buildGraph(segs, dom, mergeTol, surfaceStruts) {
+  // segs: [{a, b, surf}]
+  const P = [], m = segs.length;
+  for (const s of segs) P.push(s.a);
+  for (const s of segs) P.push(s.b);
+  const parent = new Int32Array(P.length).map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const cs = Math.max(mergeTol, 1e-6), grid = new Map(), t2 = mergeTol * mergeTol;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    const g = [Math.floor(p[0] / cs), Math.floor(p[1] / cs), Math.floor(p[2] / cs)];
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const L = grid.get((g[0] + a) + ',' + (g[1] + b) + ',' + (g[2] + c));
+      if (!L) continue;
+      for (const j of L) {
+        const d = v3.sub(P[j], p);
+        if (v3.dot(d, d) <= t2) { const ri = find(i), rj = find(j); if (ri !== rj) parent[rj] = ri; }
+      }
+    }
+    const k = g.join(',');
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(i);
+  }
+  const rootId = new Map(), inv = new Int32Array(P.length);
+  const sum = [], cnt = [], flags = [];
+  const tolS = 1e-6 * Math.max(1, dom.scale);
+  for (let i = 0; i < P.length; i++) {
+    const r = find(i);
+    if (!rootId.has(r)) { rootId.set(r, sum.length); sum.push([0, 0, 0]); cnt.push(0); flags.push(0); }
+    const id = rootId.get(r); inv[i] = id;
+    sum[id] = v3.add(sum[id], P[i]); cnt[id]++;
+    let f = 0;
+    if (dom.shape === 'box') {
+      for (let ax = 0; ax < 3; ax++) {
+        if (Math.abs(P[i][ax] - dom.lo[ax]) < tolS) f |= 1 << (2 * ax);
+        if (Math.abs(P[i][ax] - dom.hi[ax]) < tolS) f |= 1 << (2 * ax + 1);
+      }
+    } else if (Math.abs(v3.len(P[i]) - dom.R) < tolS) f = 64;
+    flags[id] |= f;
+  }
+  const V = sum.map((s, i) => v3.mul(s, 1 / cnt[i]));
+  for (let i = 0; i < V.length; i++) {
+    const f = flags[i];
+    if (dom.shape === 'box') {
+      for (let ax = 0; ax < 3; ax++) {
+        if (f & (1 << (2 * ax))) V[i][ax] = dom.lo[ax];
+        if (f & (1 << (2 * ax + 1))) V[i][ax] = dom.hi[ax];
+      }
+    } else if (f & 64) V[i] = v3.mul(V[i], dom.R / Math.max(v3.len(V[i]), 1e-12));
+  }
+  const emap = new Map();
+  for (let s = 0; s < m; s++) {
+    let a = inv[s], b = inv[s + m];
+    if (a === b) continue;
+    if (a > b) [a, b] = [b, a];
+    const k = a * 1e7 + b;
+    let surf = segs[s].surf;
+    if (dom.shape === 'box') surf = (flags[a] & flags[b]) !== 0;
+    emap.set(k, (emap.get(k) || false) || surf);
+  }
+  let E = [];
+  for (const [k, surf] of emap) {
+    if (!surfaceStruts && surf) continue;
+    const a = Math.floor(k / 1e7), b = k - a * 1e7;
+    E.push([a, b]);
+  }
+  // compact vertices
+  const used = new Int32Array(V.length).fill(-1), CV = [];
+  E = E.map(([a, b]) => [a, b].map((i) => { if (used[i] < 0) { used[i] = CV.length; CV.push(V[i]); } return used[i]; }));
+  return { V: CV, E };
+}
+
+function strutChains(E, nV) {
+  const deg = new Int32Array(nV), adj = Array.from({ length: nV }, () => []);
+  E.forEach(([a, b], ei) => { deg[a]++; deg[b]++; adj[a].push(ei); adj[b].push(ei); });
+  const seen = new Uint8Array(E.length), chains = [];
+  for (let e0 = 0; e0 < E.length; e0++) {
+    if (seen[e0]) continue;
+    seen[e0] = 1;
+    const chain = [e0];
+    for (const node of E[e0]) {
+      let cur = node;
+      while (deg[cur] === 2) {
+        const nx = adj[cur].find((e) => !seen[e]);
+        if (nx === undefined) break;
+        seen[nx] = 1; chain.push(nx);
+        const [a, b] = E[nx]; cur = a === cur ? b : a;
+      }
+    }
+    chains.push(chain);
+  }
+  return chains;
+}
+
+// ---------- main entry ----------
+function generateLattice(p) {
+  const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+  const dom = makeDomain(p);
+  const rng = mulberry32((p.seed >>> 0) ^ 0x9e3779b9);
+  const minCell = p.minCell > 0 ? p.minCell : 0;
+  let { seeds, fitted } = poissonSeeds(dom, p.cells, minCell, rng);
+  if (seeds.length < 2) throw new Error('Not enough room for 2 cells: lower the minimum cell size.');
+  for (let it = 0; it < p.relax; it++) {
+    const cells = voronoiCells(seeds, dom);
+    seeds = seeds.map((s, i) => (cells[i] ? domProject(dom, polyCentroid(cells[i]), minCell / 2) : s));
+    seeds = enforceSpacing(dom, seeds, minCell);
+  }
+  const cells = voronoiCells(seeds, dom);
+  const segs = [];
+  const segLen = 1.5 * p.thickness;
+  cells.forEach((poly, i) => {
+    if (!poly) return;
+    const emap = new Map();
+    for (const f of poly.F) {
+      const L = f.idx.length;
+      for (let k = 0; k < L; k++) {
+        const a = f.idx[k], b = f.idx[(k + 1) % L];
+        const key = a < b ? a + '_' + b : b + '_' + a;
+        if (!emap.has(key)) emap.set(key, { a, b, tags: [] });
+        emap.get(key).tags.push(f.tag);
+      }
+      if (dom.shape === 'sphere' && f.tag > i) {
+        const sj = seeds[f.tag], si = seeds[i];
+        const nrm = v3.norm(v3.sub(sj, si));
+        const h = v3.dot(nrm, v3.mul(v3.add(si, sj), 0.5));
+        for (const [a, b] of sphereArcs(f.idx.map((q) => poly.V[q]), nrm, h, dom.R, segLen)) segs.push({ a, b, surf: true });
+      }
+    }
+    for (const { a, b, tags } of emap.values()) {
+      if (dom.shape === 'box') segs.push({ a: poly.V[a], b: poly.V[b], surf: tags.some((t) => t < 0) });
+      else {
+        if (tags.some((t) => t < 0)) continue;
+        const c = clipSegBall(poly.V[a], poly.V[b], dom.R);
+        if (c) segs.push({ a: c[0], b: c[1], surf: false });
+      }
+    }
+  });
+  const { V, E } = buildGraph(segs, dom, p.minEdgeFrac * p.thickness, p.surfaceStruts);
+  const chains = strutChains(E, V.length);
+  let minSp = Infinity;
+  for (let i = 0; i < seeds.length; i++) for (let j = i + 1; j < seeds.length; j++) minSp = Math.min(minSp, v3.len(v3.sub(seeds[i], seeds[j])));
+  const lens = E.map(([a, b]) => v3.len(v3.sub(V[a], V[b])));
+  return {
+    V, E, chains, seeds, requested: p.cells, fitted: seeds.length, minSpacing: minSp,
+    totalLength: lens.reduce((s, x) => s + x, 0),
+    ms: (typeof performance !== 'undefined' ? performance : Date).now() - t0,
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { generateLattice, mulberry32 };
+
+// ===== Mesher: strut SDF (smooth union) + marching cubes, streamed by z-plane =====
+// Runs in a Web Worker. Input: { V:Float64Array(3n), E:Uint32Array(2m), chains:[...], r, k,
+//   voxel, shape:'box'|'sphere', size:[x,y,z] | radius }. Output: positions, indices, volume.
+
+// ---- marching cubes tables, generated (face-consistent ambiguity rule => watertight) ----
+const MC = (function buildTables() {
+  const C = [];
+  for (let i = 0; i < 8; i++) C.push([i & 1, (i >> 1) & 1, (i >> 2) & 1]);
+  const EDGES = [];
+  for (let a = 0; a < 8; a++) for (let b = a + 1; b < 8; b++) {
+    const d = a ^ b;
+    if (d === 1 || d === 2 || d === 4) EDGES.push([a, b]);
+  }
+  const edgeOf = (a, b) => EDGES.findIndex(([p, q]) => (p === a && q === b) || (p === b && q === a));
+  const FACES = [];
+  for (let ax = 0; ax < 3; ax++) for (let s = 0; s < 2; s++) {
+    const u = (ax + 1) % 3, v = (ax + 2) % 3;
+    const cyc = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([pu, pv]) => {
+      const c = [0, 0, 0]; c[ax] = s; c[u] = pu; c[v] = pv;
+      return c[0] | (c[1] << 1) | (c[2] << 2);
+    });
+    const n = [0, 0, 0]; n[ax] = s ? 1 : -1;
+    FACES.push({ cyc, n });
+  }
+  const mid = (e) => { const [a, b] = EDGES[e]; return [0, 1, 2].map((i) => (C[a][i] + C[b][i]) / 2); };
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const TRI = [], bad = [];
+  for (let m = 0; m < 256; m++) {
+    const ins = (i) => (m >> i) & 1;
+    const next = new Int32Array(12).fill(-1);
+    for (const { cyc, n } of FACES) {
+      const fe = [0, 1, 2, 3].map((k) => edgeOf(cyc[k], cyc[(k + 1) % 4]));
+      const crossing = fe.filter((e) => ins(EDGES[e][0]) !== ins(EDGES[e][1]));
+      const segs = [];
+      if (crossing.length === 2) {
+        const corner = cyc.find((c) => ins(c));
+        segs.push([crossing[0], crossing[1], corner]);
+      } else if (crossing.length === 4) {
+        for (let k = 0; k < 4; k++) if (ins(cyc[k])) segs.push([fe[(k + 3) % 4], fe[k], cyc[k]]);
+      }
+      for (let [ea, eb, corner] of segs) {
+        const P = mid(ea), Q = mid(eb);
+        if (dot(cross(sub(Q, P), sub(C[corner], P)), n) < 0) [ea, eb] = [eb, ea];
+        next[ea] = eb;
+      }
+    }
+    const tris = [], seen = new Uint8Array(12);
+    for (let e = 0; e < 12; e++) {
+      if (next[e] < 0 || seen[e]) continue;
+      const loop = [];
+      let cur = e;
+      while (!seen[cur]) { seen[cur] = 1; loop.push(cur); cur = next[cur]; }
+      // fan from a start vertex chosen so no triangle lies flat in one cube face
+      // (a flat one would be duplicated by the neighbouring cube)
+      const faceSet = (e) => FACES.map((f, fi) => (f.cyc.includes(EDGES[e][0]) && f.cyc.includes(EDGES[e][1]) ? fi : -1)).filter((x) => x >= 0);
+      const flat = (a, b, c) => faceSet(a).some((f) => faceSet(b).includes(f) && faceSet(c).includes(f));
+      let start = -1;
+      for (let s0 = 0; s0 < loop.length && start < 0; s0++) {
+        let ok = true;
+        for (let i = 1; i + 1 < loop.length; i++) {
+          if (flat(loop[s0], loop[(s0 + i) % loop.length], loop[(s0 + i + 1) % loop.length])) { ok = false; break; }
+        }
+        if (ok) start = s0;
+      }
+      if (start < 0) { bad.push([m, loop]); start = 0; }
+      // inside-on-left loops => reverse for outward normals
+      for (let i = 1; i + 1 < loop.length; i++) {
+        tris.push(loop[start], loop[(start + i + 1) % loop.length], loop[(start + i) % loop.length]);
+      }
+    }
+    TRI.push(tris);
+  }
+  return { EDGES, TRI, bad };
+})();
+
+function meshLattice(job, onProgress) {
+  const { V, E, chains, r, k, voxel, shape } = job;
+  const reach = r + (k > 0 ? 8 * k : 0) + 2 * voxel;
+  const pad = 2 * voxel + 2 * k;
+  let lo, ext;
+  if (shape === 'box') { lo = job.size.map((s) => -s / 2 - pad); ext = job.size.map((s) => s + 2 * pad); }
+  else { lo = [0, 1, 2].map(() => -job.radius - pad); ext = [0, 1, 2].map(() => 2 * (job.radius + pad)); }
+  const nx = Math.ceil(ext[0] / voxel) + 1, ny = Math.ceil(ext[1] / voxel) + 1, nz = Math.ceil(ext[2] / voxel) + 1;
+  const NP = nx * ny;
+
+  // ---- chain / segment precompute ----
+  const segAx = [], segAy = [], segAz = [], segBx = [], segBy = [], segBz = [];
+  const CH = chains.map((ch) => {
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    const segs = ch.map((ei) => {
+      const a = E[2 * ei], b = E[2 * ei + 1];
+      const s = {
+        ax: V[3 * a], ay: V[3 * a + 1], az: V[3 * a + 2], bx: V[3 * b], by: V[3 * b + 1], bz: V[3 * b + 2],
+      };
+      s.dx = s.bx - s.ax; s.dy = s.by - s.ay; s.dz = s.bz - s.az;
+      s.il2 = 1 / Math.max(s.dx * s.dx + s.dy * s.dy + s.dz * s.dz, 1e-12);
+      s.zmin = Math.min(s.az, s.bz) - reach; s.zmax = Math.max(s.az, s.bz) + reach;
+      s.i0 = Math.max(Math.floor((Math.min(s.ax, s.bx) - reach - lo[0]) / voxel), 0);
+      s.i1 = Math.min(Math.ceil((Math.max(s.ax, s.bx) + reach - lo[0]) / voxel) + 1, nx);
+      s.j0 = Math.max(Math.floor((Math.min(s.ay, s.by) - reach - lo[1]) / voxel), 0);
+      s.j1 = Math.min(Math.ceil((Math.max(s.ay, s.by) + reach - lo[1]) / voxel) + 1, ny);
+      x0 = Math.min(x0, s.i0); x1 = Math.max(x1, s.i1); y0 = Math.min(y0, s.j0); y1 = Math.max(y1, s.j1);
+      z0 = Math.min(z0, s.zmin); z1 = Math.max(z1, s.zmax);
+      return s;
+    });
+    return { segs, i0: x0, i1: x1, j0: y0, j1: y1, zmin: z0, zmax: z1 };
+  });
+
+  const tmp = new Float32Array(NP);
+  const acc = new Float64Array(NP);
+  const outer = shape === 'box'
+    ? (() => { const h = job.size.map((s) => s / 2); return (x, y, z) => {
+        const qx = Math.abs(x) - h[0], qy = Math.abs(y) - h[1], qz = Math.abs(z) - h[2];
+        const ox = Math.max(qx, 0), oy = Math.max(qy, 0), oz = Math.max(qz, 0);
+        return Math.hypot(ox, oy, oz) + Math.min(Math.max(qx, qy, qz), 0); }; })()
+    : ((R) => (x, y, z) => Math.hypot(x, y, z) - R)(job.radius);
+
+  function computePlane(iz, out) {
+    const z = lo[2] + iz * voxel;
+    if (k > 0) acc.fill(0); else acc.fill(Infinity);
+    for (const ch of CH) {
+      if (z < ch.zmin || z > ch.zmax) continue;
+      for (let j = ch.j0; j < ch.j1; j++) tmp.fill(Infinity, j * nx + ch.i0, j * nx + ch.i1);
+      for (const s of ch.segs) {
+        if (z < s.zmin || z > s.zmax) continue;
+        const pz = z - s.az;
+        for (let j = s.j0; j < s.j1; j++) {
+          const py = lo[1] + j * voxel - s.ay;
+          const row = j * nx;
+          for (let i = s.i0; i < s.i1; i++) {
+            const px = lo[0] + i * voxel - s.ax;
+            let t = (px * s.dx + py * s.dy + pz * s.dz) * s.il2;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            const ex = px - t * s.dx, ey = py - t * s.dy, ez = pz - t * s.dz;
+            const d = ex * ex + ey * ey + ez * ez;
+            if (d < tmp[row + i]) tmp[row + i] = d;
+          }
+        }
+      }
+      for (let j = ch.j0; j < ch.j1; j++) {
+        const row = j * nx;
+        for (let i = ch.i0; i < ch.i1; i++) {
+          const d2 = tmp[row + i];
+          if (d2 === Infinity) continue;
+          const d = Math.sqrt(d2);
+          if (k > 0) { const e = d - r; if (e < reach) acc[row + i] += Math.exp(-Math.min(e, 50 * k) / k); }
+          else if (d < acc[row + i]) acc[row + i] = d;
+        }
+      }
+    }
+    for (let j = 0; j < ny; j++) {
+      const y = lo[1] + j * voxel, row = j * nx;
+      for (let i = 0; i < nx; i++) {
+        let f;
+        if (k > 0) f = acc[row + i] > 0 ? -k * Math.log(acc[row + i]) : reach;
+        else f = acc[row + i] === Infinity ? reach : acc[row + i] - r;
+        const o = outer(lo[0] + i * voxel, y, z);
+        if (o > f) f = o;
+        if (i === 0 || j === 0 || i === nx - 1 || j === ny - 1 || iz === 0 || iz === nz - 1) f = voxel;
+        out[row + i] = f;
+      }
+    }
+  }
+
+  // ---- growable output ----
+  let pos = new Float32Array(1 << 18), np = 0;
+  let idx = new Uint32Array(1 << 19), ni = 0;
+  const pushV = (x, y, z) => {
+    if (np + 3 > pos.length) { const n = new Float32Array(pos.length * 2); n.set(pos); pos = n; }
+    pos[np++] = x; pos[np++] = y; pos[np++] = z; return np / 3 - 1;
+  };
+  const pushT = (a, b, c) => {
+    if (ni + 3 > idx.length) { const n = new Uint32Array(idx.length * 2); n.set(idx); idx = n; }
+    idx[ni++] = a; idx[ni++] = b; idx[ni++] = c;
+  };
+
+  let F0 = new Float32Array(NP), F1 = new Float32Array(NP);
+  let EX0 = new Int32Array(NP).fill(-1), EY0 = new Int32Array(NP).fill(-1);
+  let EX1 = new Int32Array(NP).fill(-1), EY1 = new Int32Array(NP).fill(-1);
+  const EZ = new Int32Array(NP);
+  const { EDGES, TRI } = MC;
+  // per cube edge: axis + base-corner offsets
+  const EINFO = EDGES.map(([a, b]) => {
+    const axis = (a ^ b) === 1 ? 0 : (a ^ b) === 2 ? 1 : 2;
+    return { axis, dx: a & 1, dy: (a >> 1) & 1, dz: (a >> 2) & 1, a, b };
+  });
+  const cv = new Float32Array(8);
+  const ev = new Int32Array(12).fill(-1);
+
+  computePlane(0, F0);
+  for (let iz = 0; iz < nz - 1; iz++) {
+    computePlane(iz + 1, F1);
+    EZ.fill(-1);
+    const z0 = lo[2] + iz * voxel;
+    for (let j = 0; j < ny - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        const b = j * nx + i;
+        cv[0] = F0[b]; cv[1] = F0[b + 1]; cv[2] = F0[b + nx]; cv[3] = F0[b + nx + 1];
+        cv[4] = F1[b]; cv[5] = F1[b + 1]; cv[6] = F1[b + nx]; cv[7] = F1[b + nx + 1];
+        let m = 0;
+        for (let c = 0; c < 8; c++) if (cv[c] < 0) m |= 1 << c;
+        if (m === 0 || m === 255) continue;
+        const tri = TRI[m];
+        for (let q = 0; q < tri.length; q++) {
+          const e = tri[q];
+          if (ev[e] !== -1) continue;
+          const inf = EINFO[e];
+          const gi = b + inf.dx + inf.dy * nx;
+          let store, top = inf.dz === 1;
+          if (inf.axis === 0) store = top ? EX1 : EX0;
+          else if (inf.axis === 1) store = top ? EY1 : EY0;
+          else store = EZ;
+          let id = store[gi];
+          if (id < 0) {
+            const fa = cv[inf.a], fb = cv[inf.b];
+            const t = fa / (fa - fb);
+            const x = lo[0] + (i + inf.dx) * voxel, y = lo[1] + (j + inf.dy) * voxel, z = z0 + inf.dz * voxel;
+            id = inf.axis === 0 ? pushV(x + t * voxel, y, z) : inf.axis === 1 ? pushV(x, y + t * voxel, z) : pushV(x, y, z + t * voxel);
+            store[gi] = id;
+          }
+          ev[e] = id;
+        }
+        for (let q = 0; q < tri.length; q += 3) {
+          const a = ev[tri[q]], bb = ev[tri[q + 1]], c = ev[tri[q + 2]];
+          if (a !== bb && bb !== c && a !== c) pushT(a, bb, c);
+        }
+        for (let q = 0; q < tri.length; q++) ev[tri[q]] = -1;
+      }
+    }
+    // roll planes
+    let t = F0; F0 = F1; F1 = t;
+    t = EX0; EX0 = EX1; EX1 = t; EX1.fill(-1);
+    t = EY0; EY0 = EY1; EY1 = t; EY1.fill(-1);
+    if (onProgress && (iz & 3) === 0) onProgress((iz + 1) / (nz - 1));
+  }
+  pos = pos.slice(0, np); idx = idx.slice(0, ni);
+  // volume
+  let vol = 0;
+  for (let q = 0; q < ni; q += 3) {
+    const a = 3 * idx[q], b = 3 * idx[q + 1], c = 3 * idx[q + 2];
+    vol += pos[a] * (pos[b + 1] * pos[c + 2] - pos[b + 2] * pos[c + 1])
+         - pos[a + 1] * (pos[b] * pos[c + 2] - pos[b + 2] * pos[c])
+         + pos[a + 2] * (pos[b] * pos[c + 1] - pos[b + 1] * pos[c]);
+  }
+  return { positions: pos, indices: idx, volume: vol / 6, grid: [nx, ny, nz] };
+}
+
+if (typeof module !== 'undefined') module.exports = { meshLattice, MC };
+
+self.onmessage = (e) => {
+  const msg = e.data;
+  try {
+    if (msg.type === 'skeleton') {
+      const L = generateLattice(msg.params);
+      const V = new Float64Array(L.V.length * 3);
+      L.V.forEach((p, i) => { V[3 * i] = p[0]; V[3 * i + 1] = p[1]; V[3 * i + 2] = p[2]; });
+      const E = new Uint32Array(L.E.length * 2);
+      L.E.forEach((ed, i) => { E[2 * i] = ed[0]; E[2 * i + 1] = ed[1]; });
+      let total = 0; L.chains.forEach((c) => (total += c.length));
+      const CI = new Uint32Array(total), CO = new Uint32Array(L.chains.length + 1);
+      let o = 0; L.chains.forEach((c, i) => { CO[i] = o; for (const x of c) CI[o++] = x; }); CO[L.chains.length] = o;
+      self.postMessage({ type: 'skeleton', id: msg.id, V, E, CI, CO, stats: {
+        requested: L.requested, fitted: L.fitted, minSpacing: L.minSpacing, totalLength: L.totalLength, ms: L.ms,
+      } }, [V.buffer, E.buffer, CI.buffer, CO.buffer]);
+    } else if (msg.type === 'mesh') {
+      const chains = [];
+      for (let i = 0; i + 1 < msg.CO.length; i++) chains.push(Array.from(msg.CI.subarray(msg.CO[i], msg.CO[i + 1])));
+      const res = meshLattice({ ...msg, chains }, (f) => self.postMessage({ type: 'progress', id: msg.id, f }));
+      self.postMessage({ type: 'mesh', id: msg.id, ...res }, [res.positions.buffer, res.indices.buffer]);
+    }
+  } catch (err) {
+    self.postMessage({ type: 'error', id: msg.id, kind: msg.type, message: String(err && err.message || err) });
+  }
+};
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------------- state (all lengths stored in mm) ----------------
+const S = {
+  unit: 'mm', shape: 'box', size: [20, 20, 20], radius: 10,
+  cells: 40, minCell: 3, seed: 42, relax: 2,
+  thickness: 0.8, fillet: 50, boundary: 'inset', surfaceStruts: true,
+  meshRes: 0.15, viewMesh: false, wire: false, fmt: 'stl', xu: 'mm',
+};
+const RES = [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
+const $ = (id) => document.getElementById(id);
+const uf = () => (S.unit === 'in' ? 25.4 : 1);
+const fmtLen = (mm, unit = S.unit) => {
+  const v = unit === 'in' ? mm / 25.4 : mm;
+  if (unit === 'in') return Math.abs(v) < 0.1 && v !== 0 ? v.toFixed(4) : v.toFixed(3);
+  return (+v.toFixed(2)).toString();
+};
+
+// ---------------- slider rows ----------------
+const controls = [];
+function slider(parent, o) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="lbl"><label for="${o.id}">${o.label}</label>${o.hint ? `<span class="hint">${o.hint}</span>` : ''}</div>
+    <div class="ctl"><input type="range" id="${o.id}-r" aria-label="${o.label}"><input type="number" id="${o.id}"><span class="u"></span></div>`;
+  parent.appendChild(row);
+  const r = row.querySelector('input[type=range]'), n = row.querySelector('input[type=number]'), u = row.querySelector('.u');
+  const c = { o, r, n, u,
+    refresh() {
+      const f = o.len ? uf() : 1;
+      const step = o.len ? (S.unit === 'in' ? o.stepIn : o.step) : o.step;
+      for (const el of [r, n]) { el.min = o.min / f; el.max = o.max / f; el.step = step; }
+      n.max = (o.hardMax ?? o.max) / f;
+      const v = o.get() / f;
+      r.value = v;
+      n.value = o.len ? fmtLen(o.get()) : (+v.toFixed(3)).toString();
+      u.textContent = o.len ? S.unit : (o.unitText || '');
+    },
+  };
+  const commit = (raw, from) => {
+    let v = parseFloat(raw);
+    if (!isFinite(v)) return;
+    const f = o.len ? uf() : 1;
+    v = Math.min(Math.max(v * f, o.min), o.hardMax ?? o.max);
+    if (o.int) v = Math.round(v);
+    o.set(v);
+    if (from !== r) r.value = v / f;
+    if (from !== n) n.value = o.len ? fmtLen(v) : (+(v / f).toFixed(3)).toString();
+    changed();
+  };
+  r.addEventListener('input', () => commit(r.value, r));
+  n.addEventListener('change', () => { commit(n.value, n); c.refresh(); });
+  controls.push(c);
+  c.refresh();
+  return c;
+}
+
+slider($('boxFields'), { id: 'sx', label: 'Length X', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[0], set: (v) => (S.size[0] = v) });
+slider($('boxFields'), { id: 'sy', label: 'Width Y', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[1], set: (v) => (S.size[1] = v) });
+slider($('boxFields'), { id: 'sz', label: 'Height Z', len: true, min: 2, max: 150, hardMax: 500, step: 0.5, stepIn: 0.01, get: () => S.size[2], set: (v) => (S.size[2] = v) });
+slider($('sphereFields'), { id: 'rad', label: 'Radius', len: true, min: 1, max: 75, hardMax: 250, step: 0.5, stepIn: 0.01, get: () => S.radius, set: (v) => (S.radius = v) });
+slider($('cellFields'), { id: 'cells', label: 'Number of cells', int: true, min: 2, max: 600, hardMax: 2000, step: 1, get: () => S.cells, set: (v) => (S.cells = v) });
+slider($('cellFields'), { id: 'minCell', label: 'Min cell size', hint: 'cube edge, 0 = off', len: true, min: 0, max: 20, hardMax: 100, step: 0.1, stepIn: 0.005, get: () => S.minCell, set: (v) => (S.minCell = v) });
+slider($('cellFields'), { id: 'relax', label: 'Relaxation', hint: '0 = fully random', int: true, min: 0, max: 8, step: 1, get: () => S.relax, set: (v) => (S.relax = v), unitText: 'it' });
+slider($('strutFields'), { id: 'thick', label: 'Strut thickness', hint: 'diameter', len: true, min: 0.1, max: 4, hardMax: 20, step: 0.05, stepIn: 0.001, get: () => S.thickness, set: (v) => (S.thickness = v) });
+slider($('strutFields'), { id: 'fillet', label: 'Node fillet', hint: '% of thickness', min: 0, max: 100, step: 1, get: () => S.fillet, set: (v) => (S.fillet = v), unitText: '%' });
+
+function radios(name, key, after) {
+  document.querySelectorAll(`input[name=${name}]`).forEach((el) => el.addEventListener('change', () => {
+    if (el.checked) { S[key] = el.value; after ? after() : changed(); }
+  }));
+}
+radios('unit', 'unit', () => { controls.forEach((c) => c.refresh()); fillRes(); updateDims(); updateStats(); });
+radios('shape', 'shape', () => { $('boxFields').hidden = S.shape !== 'box'; $('sphereFields').hidden = S.shape !== 'sphere'; changed(); });
+radios('boundary', 'boundary');
+radios('fmt', 'fmt', updateExport);
+radios('xu', 'xu', updateExport);
+$('surface').addEventListener('change', (e) => { S.surfaceStruts = e.target.checked; changed(); });
+$('seed').addEventListener('change', (e) => { const v = Math.max(0, Math.round(+e.target.value || 0)); S.seed = v; e.target.value = v; changed(); });
+$('newSeed').addEventListener('click', () => { S.seed = Math.floor(Math.random() * 100000); $('seed').value = S.seed; changed(); });
+
+function fillRes() {
+  const sel = $('meshRes');
+  sel.innerHTML = RES.map((r) => {
+    const txt = S.unit === 'in' ? `${(r / 25.4).toFixed(4)} in  (${r} mm)` : `${r} mm${r === 0.1 ? '  (finest)' : ''}`;
+    return `<option value="${r}" ${r === S.meshRes ? 'selected' : ''}>${txt}</option>`;
+  }).join('');
+}
+fillRes();
+$('meshRes').addEventListener('change', (e) => { S.meshRes = +e.target.value; updateExport(); if (S.viewMesh) scheduleMesh(); });
+$('viewMesh').addEventListener('change', (e) => { S.viewMesh = e.target.checked; applyVisibility(); if (S.viewMesh && !meshIsCurrent()) scheduleMesh(0); });
+$('wire').addEventListener('change', (e) => { S.wire = e.target.checked; matMesh.wireframe = S.wire; matStrut.wireframe = S.wire; });
+$('helpBtn').addEventListener('click', () => { const h = $('help'); h.hidden = !h.hidden; $('helpBtn').setAttribute('aria-expanded', String(!h.hidden)); });
+
+// ---------------- three.js scene ----------------
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(3, 5, 4); scene.add(key);
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 5000);
+camera.position.set(45, 32, 55);
+const orbit = new OrbitControls(camera, canvas);
+orbit.enableDamping = true; orbit.dampingFactor = 0.09;
+
+const root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root); // lattice Z is up
+const matStrut = new THREE.MeshStandardMaterial({ color: 0xd6d7dc, metalness: 0.88, roughness: 0.3 });
+const matMesh = new THREE.MeshStandardMaterial({ color: 0xd6d7dc, metalness: 0.88, roughness: 0.3 });
+const matOutline = new THREE.LineBasicMaterial({ color: 0x9a9aa2, transparent: true, opacity: 0.55 });
+const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 14, 1, true);
+const sphGeo = new THREE.SphereGeometry(1, 16, 12);
+let cylIM = null, sphIM = null, meshObj = null, outline = null;
+
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width / Math.max(r.height, 1); camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(canvas.parentElement);
+resize();
+(function loop() { orbit.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+
+function extent() { return S.shape === 'box' ? Math.hypot(...S.size) / 2 : S.radius; }
+function fitView() {
+  const R = extent();
+  const dist = R / Math.sin((camera.fov * Math.PI) / 360) * 1.08;
+  const dir = new THREE.Vector3(0.62, 0.42, 0.66).normalize();
+  orbit.target.set(0, 0, 0);
+  camera.position.copy(dir.multiplyScalar(dist));
+  camera.near = dist / 100; camera.far = dist * 20; camera.updateProjectionMatrix();
+}
+$('fit').addEventListener('click', fitView);
+
+function setOutline() {
+  if (outline) { root.remove(outline); outline.geometry.dispose(); }
+  if (S.shape === 'box') {
+    outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(...S.size)), matOutline);
+  } else {
+    const pts = [];
+    for (let k = 0; k < 3; k++) for (let i = 0; i < 96; i++) {
+      for (const t of [i, i + 1]) {
+        const a = (t / 96) * Math.PI * 2, c = Math.cos(a) * S.radius, s = Math.sin(a) * S.radius;
+        pts.push(k === 0 ? new THREE.Vector3(c, s, 0) : k === 1 ? new THREE.Vector3(c, 0, s) : new THREE.Vector3(0, c, s));
+      }
+    }
+    outline = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), matOutline);
+  }
+  root.add(outline);
+}
+
+// ---------------- workers ----------------
+const workerURL = URL.createObjectURL(new Blob([$('worker-src').textContent], { type: 'text/javascript' }));
+const skWorker = new Worker(workerURL);
+let skId = 0, skBusy = false, skPending = false, sk = null, skParams = null;
+let meshWorker = null, meshId = 0, meshState = null; // {key, final, voxel}
+let finalMesh = null; // {key, positions, indices, volume, voxel}
+let displayed = null; // what meshObj currently shows {key, final}
+
+function geomParams() {
+  return {
+    shape: S.shape, size: S.size.slice(), radius: S.radius, cells: S.cells, minCell: S.minCell,
+    thickness: S.thickness, seed: S.seed, fillet: S.fillet / 100, relax: S.relax,
+    boundary: S.boundary, surfaceStruts: S.surfaceStruts, minEdgeFrac: 0.5,
+  };
+}
+const geomKey = () => JSON.stringify(geomParams());
+
+let tChange = null;
+function changed() {
+  updateDims(); setOutline(); updateExport();
+  clearTimeout(tChange);
+  tChange = setTimeout(requestSkeleton, 70);
+}
+function requestSkeleton() {
+  if (skBusy) { skPending = true; return; }
+  skBusy = true; skPending = false;
+  skParams = geomParams();
+  skWorker.postMessage({ type: 'skeleton', id: ++skId, params: skParams });
+}
+skWorker.onmessage = (e) => {
+  const m = e.data;
+  skBusy = false;
+  if (m.type === 'error') { showError(m.message); }
+  else {
+    showError(null);
+    sk = { ...m, key: JSON.stringify(skParams), params: skParams };
+    drawSkeleton();
+    updateStats();
+    const note = $('fitNote');
+    if (m.stats.fitted < m.stats.requested) {
+      note.hidden = false;
+      note.textContent = `Only ${m.stats.fitted} of ${m.stats.requested} cells fit with a ${fmtLen(S.minCell)} ${S.unit} minimum cell size. Lower the minimum or enlarge the part.`;
+    } else note.hidden = true;
+    if (S.viewMesh) scheduleMesh();
+    applyVisibility();
+  }
+  if (skPending) requestSkeleton();
+};
+
+function drawSkeleton() {
+  const { V, E, params } = sk;
+  const r = params.thickness / 2, nE = E.length / 2, nV = V.length / 3;
+  if (!cylIM || cylIM.instanceMatrix.count < nE) {
+    if (cylIM) root.remove(cylIM);
+    cylIM = new THREE.InstancedMesh(cylGeo, matStrut, Math.max(nE * 1.5 | 0, 64)); root.add(cylIM);
+  }
+  if (!sphIM || sphIM.instanceMatrix.count < nV) {
+    if (sphIM) root.remove(sphIM);
+    sphIM = new THREE.InstancedMesh(sphGeo, matStrut, Math.max(nV * 1.5 | 0, 64)); root.add(sphIM);
+  }
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3(), s = new THREE.Vector3();
+  const deg = new Uint16Array(nV);
+  for (let i = 0; i < nE; i++) {
+    const ia = E[2 * i], ib = E[2 * i + 1]; deg[ia]++; deg[ib]++;
+    a.fromArray(V, 3 * ia); b.fromArray(V, 3 * ib);
+    d.subVectors(b, a); const L = d.length(); d.normalize();
+    q.setFromUnitVectors(up, d);
+    m4.compose(a.clone().add(b).multiplyScalar(0.5), q, s.set(r, L, r));
+    cylIM.setMatrixAt(i, m4);
+  }
+  cylIM.count = nE; cylIM.instanceMatrix.needsUpdate = true;
+  const fr = r * (1 + 0.45 * params.fillet);
+  for (let i = 0; i < nV; i++) {
+    a.fromArray(V, 3 * i);
+    const rr = deg[i] > 2 ? fr : r;
+    m4.compose(a, q.identity(), s.set(rr, rr, rr));
+    sphIM.setMatrixAt(i, m4);
+  }
+  sphIM.count = nV; sphIM.instanceMatrix.needsUpdate = true;
+  cylIM.computeBoundingSphere(); sphIM.computeBoundingSphere();
+}
+
+function meshIsCurrent() { return displayed && sk && displayed.key === sk.key; }
+function previewVoxel() {
+  const ext = S.shape === 'box' ? S.size.reduce((p, x) => p * x, 1) : 8 * S.radius ** 3;
+  return Math.max(S.meshRes, Math.cbrt(ext / 2.5e6));
+}
+let tMesh = null;
+function scheduleMesh(delay = 250) {
+  clearTimeout(tMesh);
+  tMesh = setTimeout(() => runMesh(false), delay);
+}
+function gridCount(voxel) {
+  const pad = 4 * voxel;
+  const e = S.shape === 'box' ? S.size : [1, 1, 1].map(() => 2 * S.radius);
+  return e.reduce((p, x) => p * ((x + pad) / voxel + 1), 1);
+}
+function runMesh(final) {
+  if (!sk) return;
+  if (finalMesh && finalMesh.key === sk.key && finalMesh.voxel <= (final ? S.meshRes : previewVoxel()) + 1e-9) {
+    showMesh(finalMesh, true); return;
+  }
+  const voxel = final ? S.meshRes : previewVoxel();
+  const n = gridCount(voxel);
+  if (n > 4e8) {
+    showError(`That grid is too fine for this part size (${(n / 1e6).toFixed(0)} million voxels). Pick a coarser mesh resolution.`);
+    return;
+  }
+  if (meshWorker) meshWorker.terminate();
+  meshWorker = new Worker(workerURL);
+  const id = ++meshId;
+  const p = sk.params;
+  meshState = { key: sk.key, final, voxel };
+  setBusy(final ? `Processing mesh at ${fmtLen(voxel)} ${S.unit}…` : `Meshing preview at ${fmtLen(voxel)} ${S.unit}…`, 0);
+  meshWorker.onmessage = (e) => {
+    const m = e.data;
+    if (m.id !== meshId) return;
+    if (m.type === 'progress') { setBusy(null, m.f); return; }
+    meshWorker.terminate(); meshWorker = null;
+    if (m.type === 'error') { setBusy(false); showError(m.message); return; }
+    const res = { key: meshState.key, positions: m.positions, indices: m.indices, volume: m.volume, voxel: meshState.voxel, final: meshState.final };
+    if (res.final) finalMesh = res;
+    setBusy(false);
+    showMesh(res, res.final);
+  };
+  meshWorker.postMessage({
+    type: 'mesh', id, V: sk.V.slice(), E: sk.E.slice(), CI: sk.CI.slice(), CO: sk.CO.slice(),
+    r: p.thickness / 2, k: p.fillet * p.thickness * 0.25, voxel, shape: p.shape, size: p.size, radius: p.radius,
+  });
+}
+function showMesh(res, final) {
+  if (meshObj) { root.remove(meshObj); meshObj.geometry.dispose(); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(res.positions, 3));
+  g.setIndex(new THREE.BufferAttribute(res.indices, 1));
+  g.computeVertexNormals();
+  meshObj = new THREE.Mesh(g, matMesh);
+  root.add(meshObj);
+  displayed = { key: res.key, final, voxel: res.voxel, tris: res.indices.length / 3, volume: res.volume };
+  if (final && !S.viewMesh) { S.viewMesh = true; $('viewMesh').checked = true; }
+  applyVisibility(); updateStats(); updateExport();
+}
+function applyVisibility() {
+  const showM = S.viewMesh && meshObj && meshIsCurrent();
+  if (meshObj) meshObj.visible = !!showM;
+  if (cylIM) cylIM.visible = !showM;
+  if (sphIM) sphIM.visible = !showM;
+  const hint = $('meshHint');
+  if (!S.viewMesh) hint.textContent = 'Preview shows struts only. Tick View mesh to see the solid.';
+  else if (displayed && meshIsCurrent()) hint.textContent = displayed.final
+    ? `Showing the processed mesh (${fmtLen(displayed.voxel)} ${S.unit}).`
+    : Math.abs(displayed.voxel - S.meshRes) < 1e-9
+      ? `Showing the mesh at ${fmtLen(displayed.voxel)} ${S.unit}. Process mesh to make it downloadable.`
+      : `Showing a coarser preview mesh (${fmtLen(displayed.voxel)} ${S.unit}). Process mesh builds it at ${fmtLen(S.meshRes)} ${S.unit}.`;
+  else hint.textContent = 'Building the mesh preview…';
+}
+$('process').addEventListener('click', () => { clearTimeout(tMesh); runMesh(true); });
+
+// ---------------- UI feedback ----------------
+function setBusy(text, f) {
+  const el = $('busy');
+  if (text === false) { el.hidden = true; $('bar').style.width = '0'; return; }
+  if (text) { el.hidden = false; el.textContent = text; el.dataset.base = text; }
+  if (f != null) { $('bar').style.width = (f * 100).toFixed(1) + '%'; el.textContent = `${el.dataset.base} ${Math.round(f * 100)}%`; }
+}
+function showError(msg) { const el = $('err'); el.hidden = !msg; el.textContent = msg || ''; }
+function envelopeVolume() { return S.shape === 'box' ? S.size[0] * S.size[1] * S.size[2] : (4 / 3) * Math.PI * S.radius ** 3; }
+function volStr(mm3) {
+  return S.unit === 'in' ? `${(mm3 / 16387.064).toFixed(4)} in³` : `${mm3.toFixed(1)} mm³`;
+}
+function updateDims() {
+  $('dims').textContent = S.shape === 'box'
+    ? `${S.size.map((x) => fmtLen(x)).join(' × ')} ${S.unit}`
+    : `Ø ${fmtLen(2 * S.radius)} ${S.unit}`;
+  if (!outline) setOutline();
+}
+function updateStats() {
+  const rows = [];
+  if (sk) {
+    const st = sk.stats, nE = sk.E.length / 2, nV = sk.V.length / 3;
+    rows.push(['Cells', st.fitted], ['Struts', nE], ['Nodes', nV],
+      ['Min seed gap', `${fmtLen(st.minSpacing)} ${S.unit}`]);
+    const approx = (st.totalLength * Math.PI * (sk.params.thickness / 2) ** 2) / envelopeVolume();
+    $('status').innerHTML = `<b>${st.fitted}</b> cells · <b>${nE}</b> struts · <b>${nV}</b> nodes`;
+    if (displayed && meshIsCurrent()) {
+      rows.push(['Solid volume', volStr(displayed.volume)], ['Rel. density', `${(100 * displayed.volume / envelopeVolume()).toFixed(2)} %`],
+        ['Triangles', displayed.tris.toLocaleString('en-US')]);
+    } else rows.push(['Rel. density', `≈ ${(approx * 100).toFixed(1)} %`]);
+  }
+  $('stats').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+function finalReady() { return finalMesh && sk && finalMesh.key === sk.key && Math.abs(finalMesh.voxel - S.meshRes) < 1e-9; }
+function updateExport() {
+  const ok = finalReady();
+  const btn = $('download');
+  btn.disabled = !ok;
+  if (ok) {
+    const nT = finalMesh.indices.length / 3;
+    const bytes = S.fmt === 'stl' ? 84 + 50 * nT : nT * 58;
+    btn.textContent = `Download .${S.fmt} (${(bytes / 1048576).toFixed(1)} MB)`;
+    $('dlHint').textContent = `${nT.toLocaleString('en-US')} triangles, coordinates in ${S.xu === 'in' ? 'inches' : 'millimetres'}.`;
+  } else {
+    btn.textContent = 'Download';
+    $('dlHint').textContent = finalMesh ? 'Settings changed since the last process. Process the mesh again.' : 'Process the mesh first.';
+  }
+}
+
+// ---------------- export ----------------
+function fileBase() {
+  const p = sk.params;
+  const dims = p.shape === 'box' ? `${p.size.map((x) => +x.toFixed(2)).join('x')}mm` : `R${+p.radius.toFixed(2)}mm`;
+  return `voronoi_${p.shape}_${dims}_n${sk.stats.fitted}_t${+p.thickness.toFixed(3)}_f${Math.round(p.fillet * 100)}_seed${p.seed}`;
+}
+function buildSTL(pos, idx, sc) {
+  const nT = idx.length / 3, buf = new ArrayBuffer(84 + 50 * nT), dv = new DataView(buf);
+  const head = 'Voronoi Lattice Generator';
+  for (let i = 0; i < head.length; i++) dv.setUint8(i, head.charCodeAt(i));
+  dv.setUint32(80, nT, true);
+  let o = 84;
+  for (let t = 0; t < nT; t++) {
+    const a = 3 * idx[3 * t], b = 3 * idx[3 * t + 1], c = 3 * idx[3 * t + 2];
+    const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+    const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    dv.setFloat32(o, nx / l, true); dv.setFloat32(o + 4, ny / l, true); dv.setFloat32(o + 8, nz / l, true); o += 12;
+    for (const p of [a, b, c]) { dv.setFloat32(o, pos[p] * sc, true); dv.setFloat32(o + 4, pos[p + 1] * sc, true); dv.setFloat32(o + 8, pos[p + 2] * sc, true); o += 12; }
+    o += 2;
+  }
+  return new Blob([buf], { type: 'model/stl' });
+}
+function buildOBJ(pos, idx, sc, unit) {
+  const parts = [`# Voronoi Lattice Generator\n# units: ${unit}\n`];
+  let chunk = [];
+  const flush = () => { parts.push(chunk.join('')); chunk = []; };
+  for (let i = 0; i < pos.length; i += 3) {
+    chunk.push(`v ${(pos[i] * sc).toFixed(5)} ${(pos[i + 1] * sc).toFixed(5)} ${(pos[i + 2] * sc).toFixed(5)}\n`);
+    if (chunk.length >= 50000) flush();
+  }
+  for (let i = 0; i < idx.length; i += 3) {
+    chunk.push(`f ${idx[i] + 1} ${idx[i + 1] + 1} ${idx[i + 2] + 1}\n`);
+    if (chunk.length >= 50000) flush();
+  }
+  flush();
+  return new Blob(parts, { type: 'text/plain' });
+}
+// CRC32 + stored zip (used inside the Claude viewer, which only saves allow-listed types)
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+async function zipOne(name, blob) {
+  const data = new Uint8Array(await blob.arrayBuffer());
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) crc = CRC[(crc ^ data[i]) & 255] ^ (crc >>> 8);
+  crc = (crc ^ 0xFFFFFFFF) >>> 0;
+  const nm = new TextEncoder().encode(name);
+  const lh = new DataView(new ArrayBuffer(30));
+  lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint32(14, crc, true);
+  lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, nm.length, true);
+  const cd = new DataView(new ArrayBuffer(46));
+  cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint32(16, crc, true);
+  cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true); cd.setUint16(28, nm.length, true);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, 1, true); end.setUint16(10, 1, true);
+  end.setUint32(12, 46 + nm.length, true); end.setUint32(16, 30 + nm.length + data.length, true);
+  return new Blob([lh, nm, data, cd, nm, end], { type: 'application/zip' });
+}
+$('download').addEventListener('click', async () => {
+  if (!finalReady()) return;
+  const btn = $('download'), label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Preparing file…';
+  try {
+    const sc = S.xu === 'in' ? 1 / 25.4 : 1;
+    const name = `${fileBase()}${S.xu === 'in' ? '_inch' : ''}.${S.fmt}`;
+    const blob = S.fmt === 'stl' ? buildSTL(finalMesh.positions, finalMesh.indices, sc) : buildOBJ(finalMesh.positions, finalMesh.indices, sc, S.xu);
+    let done = false;
+    if (window.claude && typeof window.claude.use === 'function') {
+      const dl = await window.claude.use('downloads').catch(() => null);
+      if (dl) {
+        try {
+          await dl.save({ filename: name.replace(/\.\w+$/, '.zip'), data: await zipOne(name, blob) });
+          $('dlHint').textContent = `Saved ${name} inside a .zip.`;
+        } catch (err) {
+          $('dlHint').textContent = err && err.code === 'declined' ? 'Download cancelled.' : 'This viewer could not save the file.';
+        }
+        done = true;
+      }
+    }
+    if (!done) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 20000);
+      $('dlHint').textContent = `Downloaded ${name}.`;
+    }
+  } finally {
+    btn.disabled = !finalReady(); btn.textContent = label;
+  }
+});
+
+// ---------------- boot ----------------
+updateDims(); setOutline(); fitView(); updateExport(); requestSkeleton();
+</script>
+
+</body>
+</html>
