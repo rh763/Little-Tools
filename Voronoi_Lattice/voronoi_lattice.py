@@ -72,11 +72,12 @@ BOUNDARY = "inset"             # "inset": strut surfaces touch the outer surface
                                #          outer dimensions exact, rounded frame
                                # "clip" : strut axes on the outer surface, then cut
                                #          flush -> flat / smooth outer faces
-EXACT_SIZE = True              # True: trim anything past the outer surface (mainly
-                               #   fillet bulges at outer nodes), so the part measures
-                               #   exactly BOX_SIZE / SPHERE_RADIUS. False: outer nodes
-                               #   keep their full round fillet, part is slightly
-                               #   larger. "clip" boundary is always exact.
+EXACT_SIZE = True              # True: part measures exactly BOX_SIZE / SPHERE_RADIUS.
+                               #   With "inset" the fillet fades out toward the outer
+                               #   skin, so outer nodes stay round and never bulge
+                               #   past the surface. False: outer nodes keep their
+                               #   full fillet, part is slightly larger.
+                               #   "clip" boundary is always exact.
 SURFACE_STRUTS = True          # True: keep struts on the outer surface (closed cage)
                                # False: open lattice, interior struts only
 VOXEL_SIZE = None              # mesh resolution [mm]; None = thickness / 6
@@ -486,14 +487,21 @@ def strut_chains(E, n_nodes):
     return chains
 
 
-def strut_sdf(V, E, radius, k, grid_lo, voxel, shape):
+def strut_sdf(V, E, radius, k, grid_lo, voxel, shape, kmap=None):
     """
     f < 0 inside material, f = 0 on the surface.
     k = 0 -> plain union;  k > 0 -> exponential smooth-min between struts
     d = -k ln(sum exp(-d_i/k))  (order independent, fillets of size ~k).
+    kmap: optional per-voxel blend width (<= k), e.g. fading to 0 at the outer skin.
+    Evaluated as a numerically stable running log-sum-exp.
     """
     reach = radius + (8.0 * k if k > 0 else 0.0) + 2 * voxel
-    acc = np.zeros(shape, np.float64) if k > 0 else np.full(shape, np.inf, np.float32)
+    if k > 0:
+        kmap = np.full(shape, k, np.float64) if kmap is None else kmap.astype(np.float64)
+        m_acc = np.full(shape, np.inf, np.float64)   # running min of (d_i - r)
+        s_acc = np.zeros(shape, np.float64)          # sum exp(-(d_i - r - min)/k)
+    else:
+        acc = np.full(shape, np.inf, np.float32)
     for chain in strut_chains(E, len(V)):
         P = V[E[chain].ravel()]
         i0 = np.maximum(np.floor((P.min(0) - reach - grid_lo) / voxel).astype(int), 0)
@@ -513,12 +521,19 @@ def strut_sdf(V, E, radius, k, grid_lo, voxel, shape):
                                   + (PZ - t * ab[2]) ** 2), out=d)
         sl = tuple(slice(i0[i], i1[i]) for i in range(3))
         if k > 0:
-            acc[sl] += np.exp(-np.minimum(d - radius, 50 * k) / k)
+            e = d - radius
+            m, s_, kk = m_acc[sl], s_acc[sl], kmap[sl]
+            near = e < reach
+            new_m = np.where(near, np.minimum(m, e), m)
+            with np.errstate(invalid="ignore", over="ignore"):
+                s_new = np.where(np.isfinite(m), s_ * np.exp((new_m - m) / kk), 0.0)
+                s_new = s_new + np.where(near, np.exp((new_m - e) / kk), 0.0)
+            m_acc[sl], s_acc[sl] = new_m, s_new
         else:
             np.minimum(acc[sl], d.astype(np.float32), out=acc[sl])
     if k > 0:
-        with np.errstate(divide="ignore"):
-            f = -k * np.log(acc)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            f = m_acc - kmap * np.log(s_acc)
     else:
         f = acc - radius
     f[~np.isfinite(f)] = reach
@@ -626,10 +641,17 @@ def build(shape="box", size=BOX_SIZE, radius=SPHERE_RADIUS, n_cells=N_CELLS,
     gshape = tuple(np.ceil(ext / voxel).astype(int) + 1)
     print(f"Voxel grid: {gshape[0]} x {gshape[1]} x {gshape[2]}  (voxel {voxel:.3f} mm)")
 
-    f = strut_sdf(V, E, r, k, grid_lo, voxel, gshape)
-    if exact or boundary == "clip":  # trim everything past the outer surface
-        f = np.maximum(f, outer_sdf(shape, grid_lo, voxel, gshape,
-                                    size=np.asarray(size, float), R=radius))
+    trim = exact or boundary == "clip"
+    o = outer_sdf(shape, grid_lo, voxel, gshape, size=np.asarray(size, float), R=radius)
+    kmap = None
+    if k > 0 and trim and boundary == "inset":
+        # fade the fillet out toward the outer skin: outer nodes stay round and
+        # never bulge past the surface (instead of being chopped flat)
+        t = np.clip(-o / r, 0.0, 1.0)
+        kmap = k * np.maximum(t * t * (3 - 2 * t), 1e-3)
+    f = strut_sdf(V, E, r, k, grid_lo, voxel, gshape, kmap)
+    if trim:  # trim anything left past the outer surface
+        f = np.maximum(f, o)
     for ax in range(3):  # close the mesh at the grid border
         idx = [slice(None)] * 3
         idx[ax] = [0, -1]
@@ -637,6 +659,11 @@ def build(shape="box", size=BOX_SIZE, radius=SPHERE_RADIUS, n_cells=N_CELLS,
 
     verts, faces, _, _ = marching_cubes(f, level=0.0, spacing=(voxel,) * 3)
     verts += grid_lo
+    # weld duplicate vertices and drop zero-area triangles (cleaner, manifold STL)
+    verts, inv = np.unique(verts.astype(np.float32), axis=0, return_inverse=True)
+    verts = verts.astype(np.float64)
+    faces = inv.ravel()[faces]
+    faces = faces[(faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])]
     if mesh_volume(verts, faces) < 0:
         faces = faces[:, ::-1]
 
