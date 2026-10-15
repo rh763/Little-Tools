@@ -8,8 +8,9 @@ A browser tool for designing stochastic **Voronoi strut lattices** inside a box 
 - **Units:** mm or inch for every length, and mm or inch for the exported file
 - **Cells:** number of cells, **minimum cell size** (cube edge; seeds are kept at least this far apart so no cell is too small to print), **minimum strut length** (shorter struts are collapsed into one node, removing tight node clusters), random seed, Lloyd relaxation
 - **Struts:** thickness (diameter), node fillet (% of thickness), rounded or flat-cut outer surface, **exact outer size** (the fillet fades out toward the outer skin so outer nodes stay round and never bulge past the surface; the part measures exactly the set size, and the measured mesh size is shown), struts on the outer surface on/off
-- **Mesh:** resolution from 0.5 mm down to 0.1 mm, live mesh preview, wireframe view
-- **Export:** binary STL or OBJ, watertight (closed, manifold) mesh
+- **Mesh:** resolution from 0.5 mm down to 0.1 mm, live mesh preview, wireframe view, **simplify** (quadric edge collapse with a maximum shape deviation; flat strut sides get large triangles, nodes keep their detail, usually about half the file size)
+- **Export:** binary STL or OBJ, watertight (closed, manifold) mesh, named like `261015_VLG_box_20x20x20mm.stl` (download date, shape, size)
+- Settings survive a page refresh; closing the tab and opening the page again starts from the defaults
 
 ## Publish with GitHub Pages
 
@@ -28,7 +29,8 @@ You can also open `index.html` directly in a browser (it needs an internet conne
 
 The exported mesh is an implicit (signed-distance) solid, so it is always closed and watertight. The strut view in the browser is a fast surface approximation of it; tick View mesh to see the real solid.
 5. Marching cubes (streamed plane by plane in a Web Worker) turns the field into a triangle mesh.
+6. Process mesh can then simplify it with quadric-error edge collapse (Garland & Heckbert), keeping the mesh closed and manifold and the outer size exact.
 
 ## Python version
 
-`voronoi_lattice.py` does the same thing offline (`pip install numpy scipy scikit-image`). Run `python voronoi_lattice.py -h` for options. The web tool and the script use different random number generators and relaxation methods, so the same seed gives different lattices in each.
+`voronoi_lattice.py` does the same thing offline (`pip install numpy scipy scikit-image`). Run `python voronoi_lattice.py -h` for options. It does not simplify the mesh; the web tool does. The web tool and the script use different random number generators and relaxation methods, so the same seed gives different lattices in each.

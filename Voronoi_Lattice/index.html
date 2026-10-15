@@ -219,16 +219,16 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
       <section class="group">
         <div class="tabline"><h2 class="tab">Units</h2><button type="button" class="qi" data-help="units">?</button></div>
         <div class="checks" role="radiogroup" aria-label="Length units">
-          <label class="chk"><input type="radio" name="unit" value="mm" id="unit-mm" checked><span class="box"></span><span>mm</span></label>
-          <label class="chk"><input type="radio" name="unit" value="in" id="unit-in"><span class="box"></span><span>inch</span></label>
+          <label class="chk"><input autocomplete="off" type="radio" name="unit" value="mm" id="unit-mm" checked><span class="box"></span><span>mm</span></label>
+          <label class="chk"><input autocomplete="off" type="radio" name="unit" value="in" id="unit-in"><span class="box"></span><span>inch</span></label>
         </div>
       </section>
 
       <section class="group">
         <div class="tabline"><h2 class="tab">Solid geometry</h2><button type="button" class="qi" data-help="shape">?</button></div>
         <div class="checks" role="radiogroup" aria-label="Solid shape">
-          <label class="chk"><input type="radio" name="shape" value="box" id="shape-box" checked><span class="box"></span><span>Box</span></label>
-          <label class="chk"><input type="radio" name="shape" value="sphere" id="shape-sphere"><span class="box"></span><span>Sphere</span></label>
+          <label class="chk"><input autocomplete="off" type="radio" name="shape" value="box" id="shape-box" checked><span class="box"></span><span>Box</span></label>
+          <label class="chk"><input autocomplete="off" type="radio" name="shape" value="sphere" id="shape-sphere"><span class="box"></span><span>Sphere</span></label>
         </div>
         <div id="boxFields" class="group"></div>
         <div id="sphereFields" class="group" hidden></div>
@@ -241,7 +241,7 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
         <div class="row">
           <div class="lbl"><label for="seed">Random seed<button type="button" class="qi" data-help="seed">?</button></label><span class="hint">same seed, same lattice</span></div>
           <div class="seedrow">
-            <input type="number" id="seed" min="0" max="999999" step="1" value="42">
+            <input autocomplete="off" type="number" id="seed" min="0" max="999999" step="1" value="42">
             <button type="button" class="b" id="newSeed">New seed</button>
           </div>
         </div>
@@ -253,23 +253,27 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
         <div class="row">
           <div class="lbl"><span>Outer surface<button type="button" class="qi" data-help="boundary">?</button></span></div>
           <div class="checks" role="radiogroup" aria-label="Outer surface">
-            <label class="chk"><input type="radio" name="boundary" value="inset" id="bd-inset" checked><span class="box"></span><span>Rounded</span></label>
-            <label class="chk"><input type="radio" name="boundary" value="clip" id="bd-clip"><span class="box"></span><span>Flat cut</span></label>
+            <label class="chk"><input autocomplete="off" type="radio" name="boundary" value="inset" id="bd-inset" checked><span class="box"></span><span>Rounded</span></label>
+            <label class="chk"><input autocomplete="off" type="radio" name="boundary" value="clip" id="bd-clip"><span class="box"></span><span>Flat cut</span></label>
           </div>
         </div>
-        <div class="row"><div class="inline"><label class="chk"><input type="checkbox" id="exact" checked><span class="box"></span><span>Exact outer size</span></label><button type="button" class="qi" data-help="exact">?</button></div></div>
-        <div class="row"><div class="inline"><label class="chk"><input type="checkbox" id="surface" checked><span class="box"></span><span>Struts on outer surface</span></label><button type="button" class="qi" data-help="surface">?</button></div></div>
+        <div class="row"><div class="inline"><label class="chk"><input autocomplete="off" type="checkbox" id="exact" checked><span class="box"></span><span>Exact outer size</span></label><button type="button" class="qi" data-help="exact">?</button></div></div>
+        <div class="row"><div class="inline"><label class="chk"><input autocomplete="off" type="checkbox" id="surface" checked><span class="box"></span><span>Struts on outer surface</span></label><button type="button" class="qi" data-help="surface">?</button></div></div>
       </section>
 
       <section class="group">
         <div class="tabline"><h2 class="tab">Mesh</h2><button type="button" class="qi" data-help="mesh">?</button></div>
         <div class="row">
           <div class="lbl"><label for="meshRes">Mesh resolution<button type="button" class="qi" data-help="meshres">?</button></label><span class="hint">voxel size</span></div>
-          <select id="meshRes"></select>
+          <select autocomplete="off" id="meshRes"></select>
+        </div>
+        <div class="row">
+          <div class="lbl"><label for="simplify">Simplify<button type="button" class="qi" data-help="simplify">?</button></label><span class="hint">smaller file</span></div>
+          <select autocomplete="off" id="simplify"></select>
         </div>
         <div class="checks">
-          <label class="chk"><input type="checkbox" id="viewMesh"><span class="box"></span><span>View mesh</span></label>
-          <label class="chk"><input type="checkbox" id="wire"><span class="box"></span><span>Wireframe</span></label>
+          <label class="chk"><input autocomplete="off" type="checkbox" id="viewMesh"><span class="box"></span><span>View mesh</span></label>
+          <label class="chk"><input autocomplete="off" type="checkbox" id="wire"><span class="box"></span><span>Wireframe</span></label>
         </div>
         <p class="hint-line" id="meshHint">Preview shows struts only. Tick View mesh to see the solid.</p>
         <button type="button" class="b go" id="process">Process mesh</button>
@@ -281,15 +285,15 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
           <div class="row">
             <div class="lbl"><span>Format<button type="button" class="qi" data-help="format">?</button></span></div>
             <div class="checks" role="radiogroup" aria-label="File format">
-              <label class="chk"><input type="radio" name="fmt" value="stl" id="fmt-stl" checked><span class="box"></span><span>STL</span></label>
-              <label class="chk"><input type="radio" name="fmt" value="obj" id="fmt-obj"><span class="box"></span><span>OBJ</span></label>
+              <label class="chk"><input autocomplete="off" type="radio" name="fmt" value="stl" id="fmt-stl" checked><span class="box"></span><span>STL</span></label>
+              <label class="chk"><input autocomplete="off" type="radio" name="fmt" value="obj" id="fmt-obj"><span class="box"></span><span>OBJ</span></label>
             </div>
           </div>
           <div class="row">
             <div class="lbl"><span>File units<button type="button" class="qi" data-help="xunits">?</button></span></div>
             <div class="checks" role="radiogroup" aria-label="File units">
-              <label class="chk"><input type="radio" name="xu" value="mm" id="xu-mm" checked><span class="box"></span><span>mm</span></label>
-              <label class="chk"><input type="radio" name="xu" value="in" id="xu-in"><span class="box"></span><span>in</span></label>
+              <label class="chk"><input autocomplete="off" type="radio" name="xu" value="mm" id="xu-mm" checked><span class="box"></span><span>mm</span></label>
+              <label class="chk"><input autocomplete="off" type="radio" name="xu" value="in" id="xu-in"><span class="box"></span><span>in</span></label>
             </div>
           </div>
         </div>
@@ -1096,7 +1100,232 @@ function meshLattice(job, onProgress) {
   return { positions: pos, indices: idx, volume: vol / 6, grid: [nx, ny, nz] };
 }
 
-if (typeof module !== 'undefined') module.exports = { meshLattice, MC };
+// ---------------------------------------------------------------------------
+// Mesh simplification: quadric error metric edge collapse (Garland & Heckbert).
+// Collapses edges while the accumulated squared plane distance stays below tol^2,
+// so flat-ish regions (strut sides) lose most triangles and curved nodes keep detail.
+// Keeps the mesh closed and manifold (link condition) and rejects collapses that
+// flip or squash triangles.
+// ---------------------------------------------------------------------------
+function simplifyMesh(positions, indices, tol, onProgress) {
+  const nV = positions.length / 3, nF = indices.length / 3;
+  const P = new Float64Array(positions);
+  const F = new Int32Array(indices);
+  const fAlive = new Uint8Array(nF).fill(1);
+  const vAlive = new Uint8Array(nV).fill(1);
+  const ver = new Int32Array(nV);
+  const Q = new Float64Array(nV * 10);
+  // vertex -> faces
+  const vfCount = new Int32Array(nV);
+  for (let i = 0; i < F.length; i++) vfCount[F[i]]++;
+  const VF = new Array(nV);
+  for (let v = 0; v < nV; v++) VF[v] = [];
+  for (let f = 0; f < nF; f++) for (let k = 0; k < 3; k++) VF[F[3 * f + k]].push(f);
+
+  const fn = (f, out) => {
+    const a = 3 * F[3 * f], b = 3 * F[3 * f + 1], c = 3 * F[3 * f + 2];
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+    const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    out[0] = uy * vz - uz * vy; out[1] = uz * vx - ux * vz; out[2] = ux * vy - uy * vx;
+    return a;
+  };
+  const n = [0, 0, 0];
+  for (let f = 0; f < nF; f++) {
+    const a = fn(f, n);
+    const l = Math.hypot(n[0], n[1], n[2]);
+    if (l < 1e-20) continue;
+    const nx = n[0] / l, ny = n[1] / l, nz = n[2] / l, d = -(nx * P[a] + ny * P[a + 1] + nz * P[a + 2]);
+    for (let k = 0; k < 3; k++) {
+      const q = 10 * F[3 * f + k];
+      Q[q] += nx * nx; Q[q + 1] += nx * ny; Q[q + 2] += nx * nz; Q[q + 3] += nx * d;
+      Q[q + 4] += ny * ny; Q[q + 5] += ny * nz; Q[q + 6] += ny * d;
+      Q[q + 7] += nz * nz; Q[q + 8] += nz * d; Q[q + 9] += d * d;
+    }
+  }
+  const qe = (q, x, y, z) =>
+    q[0] * x * x + 2 * q[1] * x * y + 2 * q[2] * x * z + 2 * q[3] * x +
+    q[4] * y * y + 2 * q[5] * y * z + 2 * q[6] * y + q[7] * z * z + 2 * q[8] * z + q[9];
+
+  // ---- binary min-heap of candidate collapses ----
+  let cap = 1 << 20, hn = 0;
+  let hc = new Float64Array(cap), hu = new Int32Array(cap), hv = new Int32Array(cap), hvu = new Int32Array(cap), hvv = new Int32Array(cap);
+  let hx = new Float64Array(cap), hy = new Float64Array(cap), hz = new Float64Array(cap);
+  const swap = (i, j) => {
+    let t;
+    t = hc[i]; hc[i] = hc[j]; hc[j] = t; t = hu[i]; hu[i] = hu[j]; hu[j] = t; t = hv[i]; hv[i] = hv[j]; hv[j] = t;
+    t = hvu[i]; hvu[i] = hvu[j]; hvu[j] = t; t = hvv[i]; hvv[i] = hvv[j]; hvv[j] = t;
+    t = hx[i]; hx[i] = hx[j]; hx[j] = t; t = hy[i]; hy[i] = hy[j]; hy[j] = t; t = hz[i]; hz[i] = hz[j]; hz[j] = t;
+  };
+  const grow = () => {
+    const c2 = cap * 2;
+    const g = (a, T) => { const b = new T(c2); b.set(a); return b; };
+    hc = g(hc, Float64Array); hu = g(hu, Int32Array); hv = g(hv, Int32Array); hvu = g(hvu, Int32Array); hvv = g(hvv, Int32Array);
+    hx = g(hx, Float64Array); hy = g(hy, Float64Array); hz = g(hz, Float64Array); cap = c2;
+  };
+  const qs = new Float64Array(10);
+  const limit = tol * tol;
+  function pushEdge(u, v) {
+    const a = 10 * u, b = 10 * v;
+    for (let i = 0; i < 10; i++) qs[i] = Q[a + i] + Q[b + i];
+    // optimal point: solve A x = -b
+    const A00 = qs[0], A01 = qs[1], A02 = qs[2], A11 = qs[4], A12 = qs[5], A22 = qs[7];
+    const c00 = A11 * A22 - A12 * A12, c01 = A02 * A12 - A01 * A22, c02 = A01 * A12 - A02 * A11;
+    const det = A00 * c00 + A01 * c01 + A02 * c02;
+    const pu = 3 * u, pv = 3 * v;
+    let x, y, z, cost;
+    const sc = A00 + A11 + A22;
+    if (Math.abs(det) > 1e-9 * sc * sc * sc) {
+      const b0 = -qs[3], b1 = -qs[6], b2 = -qs[8];
+      const c11 = A00 * A22 - A02 * A02, c12 = A01 * A02 - A00 * A12, c22 = A00 * A11 - A01 * A01;
+      x = (c00 * b0 + c01 * b1 + c02 * b2) / det;
+      y = (c01 * b0 + c11 * b1 + c12 * b2) / det;
+      z = (c02 * b0 + c12 * b1 + c22 * b2) / det;
+      // stay near the edge (avoid far-off solutions in near-singular cases)
+      const mx = (P[pu] + P[pv]) / 2, my = (P[pu + 1] + P[pv + 1]) / 2, mz = (P[pu + 2] + P[pv + 2]) / 2;
+      const L = Math.hypot(P[pu] - P[pv], P[pu + 1] - P[pv + 1], P[pu + 2] - P[pv + 2]);
+      if (Math.hypot(x - mx, y - my, z - mz) > 2 * L) { x = NaN; }
+      else cost = qe(qs, x, y, z);
+    } else x = NaN;
+    if (Number.isNaN(x)) {
+      const cand = [[P[pu], P[pu + 1], P[pu + 2]], [P[pv], P[pv + 1], P[pv + 2]],
+        [(P[pu] + P[pv]) / 2, (P[pu + 1] + P[pv + 1]) / 2, (P[pu + 2] + P[pv + 2]) / 2]];
+      cost = Infinity;
+      for (const c of cand) { const e = qe(qs, c[0], c[1], c[2]); if (e < cost) { cost = e; x = c[0]; y = c[1]; z = c[2]; } }
+    }
+    if (!(cost <= limit)) return;
+    if (hn >= cap) grow();
+    let i = hn++;
+    hc[i] = cost; hu[i] = u; hv[i] = v; hvu[i] = ver[u]; hvv[i] = ver[v]; hx[i] = x; hy[i] = y; hz[i] = z;
+    while (i > 0) { const p = (i - 1) >> 1; if (hc[p] <= hc[i]) break; swap(i, p); i = p; }
+  }
+  function pop() {
+    hn--; swap(0, hn);
+    let i = 0;
+    for (;;) {
+      const l = 2 * i + 1, r = l + 1; let m = i;
+      if (l < hn && hc[l] < hc[m]) m = l;
+      if (r < hn && hc[r] < hc[m]) m = r;
+      if (m === i) break; swap(i, m); i = m;
+    }
+    return hn;
+  }
+  for (let f = 0; f < nF; f++) for (let k = 0; k < 3; k++) {
+    const a = F[3 * f + k], b = F[3 * f + (k + 1) % 3];
+    if (a < b) pushEdge(a, b);
+  }
+
+  const mark = new Int32Array(nV), mark2 = new Int32Array(nV);
+  let stamp = 0;
+  const n0 = [0, 0, 0], n1 = [0, 0, 0];
+  let removed = 0, iter = 0;
+  const total0 = hn;
+  while (hn > 0) {
+    const e = pop();
+    const u = hu[e], v = hv[e];
+    if (!vAlive[u] || !vAlive[v] || hvu[e] !== ver[u] || hvv[e] !== ver[v]) continue;
+    if ((++iter & 32767) === 0 && onProgress) onProgress(Math.min(1, iter / total0));
+    const tx = hx[e], ty = hy[e], tz = hz[e];
+    // link condition: common neighbours must be exactly the 2 opposite vertices
+    stamp++;
+    for (const f of VF[u]) for (let k = 0; k < 3; k++) mark[F[3 * f + k]] = stamp;
+    let shared = 0, common = 0;
+    stamp++;
+    for (const f of VF[v]) {
+      let hasU = false;
+      for (let k = 0; k < 3; k++) if (F[3 * f + k] === u) hasU = true;
+      if (hasU) shared++;
+      for (let k = 0; k < 3; k++) {
+        const w = F[3 * f + k];
+        if (w !== u && w !== v && mark[w] === stamp - 1 && mark2[w] !== stamp) { mark2[w] = stamp; common++; }
+      }
+    }
+    if (shared !== 2 || common !== 2) continue;
+    // geometry check: no flipped or degenerate triangles around u and v
+    let ok = true;
+    for (const vv of [u, v]) {
+      for (const f of VF[vv]) {
+        let hasU = false, hasV = false;
+        for (let k = 0; k < 3; k++) { if (F[3 * f + k] === u) hasU = true; if (F[3 * f + k] === v) hasV = true; }
+        if (hasU && hasV) continue;
+        fn(f, n0);
+        const p = 3 * vv, ox = P[p], oy = P[p + 1], oz = P[p + 2];
+        P[p] = tx; P[p + 1] = ty; P[p + 2] = tz;
+        fn(f, n1);
+        P[p] = ox; P[p + 1] = oy; P[p + 2] = oz;
+        const l0 = Math.hypot(n0[0], n0[1], n0[2]), l1 = Math.hypot(n1[0], n1[1], n1[2]);
+        if (l1 < 1e-14 || (n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2]) < 0.3 * l0 * l1) { ok = false; break; }
+        // reject slivers: area vs longest edge squared
+        const a = 3 * F[3 * f], b = 3 * F[3 * f + 1], c = 3 * F[3 * f + 2];
+        const get = (i) => (i === p ? [tx, ty, tz] : [P[i], P[i + 1], P[i + 2]]);
+        const A = get(a), B = get(b), C = get(c);
+        const e2 = Math.max((A[0] - B[0]) ** 2 + (A[1] - B[1]) ** 2 + (A[2] - B[2]) ** 2,
+          (B[0] - C[0]) ** 2 + (B[1] - C[1]) ** 2 + (B[2] - C[2]) ** 2, (C[0] - A[0]) ** 2 + (C[1] - A[1]) ** 2 + (C[2] - A[2]) ** 2);
+        if (l1 < 0.05 * e2) { ok = false; break; }
+      }
+      if (!ok) break;
+    }
+    if (!ok) continue;
+    // collapse v into u
+    const keep = [];
+    for (const f of VF[u]) {
+      let hasV = false;
+      for (let k = 0; k < 3; k++) if (F[3 * f + k] === v) hasV = true;
+      if (hasV) { fAlive[f] = 0; removed++; } else keep.push(f);
+    }
+    for (const f of VF[v]) {
+      if (!fAlive[f]) continue;
+      let hasU = false;
+      for (let k = 0; k < 3; k++) if (F[3 * f + k] === u) hasU = true;
+      if (hasU) { fAlive[f] = 0; continue; }
+      for (let k = 0; k < 3; k++) if (F[3 * f + k] === v) F[3 * f + k] = u;
+      keep.push(f);
+    }
+    // remove dead faces from the opposite vertices' lists
+    VF[u] = keep; VF[v] = [];
+    vAlive[v] = 0;
+    P[3 * u] = tx; P[3 * u + 1] = ty; P[3 * u + 2] = tz;
+    for (let i = 0; i < 10; i++) Q[10 * u + i] += Q[10 * v + i];
+    ver[u]++;
+    stamp++;
+    for (const f of keep) for (let k = 0; k < 3; k++) {
+      const w = F[3 * f + k];
+      if (w === u || mark[w] === stamp) continue;
+      mark[w] = stamp;
+      VF[w] = VF[w].filter((g) => fAlive[g]);
+      pushEdge(u, w);
+    }
+  }
+  // compact
+  const remap = new Int32Array(nV).fill(-1);
+  let nv2 = 0, nf2 = 0;
+  for (let f = 0; f < nF; f++) if (fAlive[f]) nf2++;
+  const outI = new Uint32Array(nf2 * 3);
+  const outP = [];
+  let o = 0;
+  for (let f = 0; f < nF; f++) {
+    if (!fAlive[f]) continue;
+    for (let k = 0; k < 3; k++) {
+      const v = F[3 * f + k];
+      if (remap[v] < 0) { remap[v] = nv2++; outP.push(P[3 * v], P[3 * v + 1], P[3 * v + 2]); }
+      outI[o++] = remap[v];
+    }
+  }
+  if (onProgress) onProgress(1);
+  return { positions: new Float32Array(outP), indices: outI };
+}
+
+function meshVolume(pos, idx) {
+  let vol = 0;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = 3 * idx[t], b = 3 * idx[t + 1], c = 3 * idx[t + 2];
+    vol += pos[a] * (pos[b + 1] * pos[c + 2] - pos[b + 2] * pos[c + 1])
+      - pos[a + 1] * (pos[b] * pos[c + 2] - pos[b + 2] * pos[c])
+      + pos[a + 2] * (pos[b] * pos[c + 1] - pos[b + 1] * pos[c]);
+  }
+  return vol / 6;
+}
+
+if (typeof module !== 'undefined') module.exports = { meshLattice, MC, simplifyMesh, meshVolume };
 
 self.onmessage = (e) => {
   const msg = e.data;
@@ -1116,8 +1345,29 @@ self.onmessage = (e) => {
     } else if (msg.type === 'mesh') {
       const chains = [];
       for (let i = 0; i + 1 < msg.CO.length; i++) chains.push(Array.from(msg.CI.subarray(msg.CO[i], msg.CO[i + 1])));
-      const res = meshLattice({ ...msg, chains }, (f) => self.postMessage({ type: 'progress', id: msg.id, f }));
-      self.postMessage({ type: 'mesh', id: msg.id, ...res }, [res.positions.buffer, res.indices.buffer]);
+      const simp = msg.simplifyTol > 0;
+      const span = simp ? 0.6 : 1;
+      let res = meshLattice({ ...msg, chains }, (f) => self.postMessage({ type: 'progress', id: msg.id, f: f * span }));
+      const trisBefore = res.indices.length / 3;
+      if (simp) {
+        self.postMessage({ type: 'progress', id: msg.id, f: span, label: 'Simplifying mesh…' });
+        const sm = simplifyMesh(res.positions, res.indices, msg.simplifyTol, (f) => self.postMessage({ type: 'progress', id: msg.id, f: span + (1 - span) * f }));
+        // keep the outer size exact: pull any vertex the optimiser nudged outside back onto the solid
+        const p = sm.positions;
+        if (msg.exact) {
+          if (msg.shape === 'box') {
+            const h = msg.size.map((x) => x / 2);
+            for (let i = 0; i < p.length; i += 3) for (let a = 0; a < 3; a++) p[i + a] = Math.min(Math.max(p[i + a], -h[a]), h[a]);
+          } else {
+            for (let i = 0; i < p.length; i += 3) {
+              const l = Math.hypot(p[i], p[i + 1], p[i + 2]);
+              if (l > msg.radius) { const c = msg.radius / l; p[i] *= c; p[i + 1] *= c; p[i + 2] *= c; }
+            }
+          }
+        }
+        res = { ...res, positions: p, indices: sm.indices, volume: meshVolume(p, sm.indices) };
+      }
+      self.postMessage({ type: 'mesh', id: msg.id, ...res, trisBefore }, [res.positions.buffer, res.indices.buffer]);
     }
   } catch (err) {
     self.postMessage({ type: 'error', id: msg.id, kind: msg.type, message: String(err && err.message || err) });
@@ -1141,8 +1391,29 @@ const S = {
   unit: 'mm', shape: 'box', size: [20, 20, 20], radius: 10,
   cells: 40, minCell: 3, minStrut: 1, seed: 42, relax: 2,
   thickness: 0.8, fillet: 50, boundary: 'inset', surfaceStruts: true, exact: true,
-  meshRes: 0.15, viewMesh: false, wire: false, fmt: 'stl', xu: 'mm',
+  meshRes: 0.15, simplify: 0.025, viewMesh: false, wire: false, fmt: 'stl', xu: 'mm',
 };
+// Keep settings across a page refresh (sessionStorage lives as long as the tab);
+// closing the tab and opening the page again starts from the defaults.
+const STORE_KEY = 'vlg-settings-v1';
+(function restore() {
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null'); } catch (e) { saved = null; }
+  if (!saved || typeof saved !== 'object') return;
+  for (const k of Object.keys(S)) {
+    const v = saved[k], d = S[k];
+    if (Array.isArray(d)) { if (Array.isArray(v) && v.length === d.length && v.every((x) => typeof x === 'number' && isFinite(x))) S[k] = v.slice(); }
+    else if (typeof v === typeof d && (typeof v !== 'number' || isFinite(v))) S[k] = v;
+  }
+})();
+let tSave = null;
+function saveSoon() {
+  clearTimeout(tSave);
+  tSave = setTimeout(() => { try { sessionStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ } }, 150);
+}
+document.addEventListener('change', saveSoon);
+document.addEventListener('input', saveSoon);
+const SIMP = [0, 0.01, 0.025, 0.05]; // max deviation, as a fraction of strut thickness
 const RES = [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
 const $ = (id) => document.getElementById(id);
 const uf = () => (S.unit === 'in' ? 25.4 : 1);
@@ -1158,7 +1429,7 @@ function slider(parent, o) {
   const row = document.createElement('div');
   row.className = 'row';
   row.innerHTML = `<div class="lbl"><label for="${o.id}">${o.label}${o.help ? `<button type="button" class="qi" data-help="${o.help}">?</button>` : ''}</label>${o.hint ? `<span class="hint">${o.hint}</span>` : ''}</div>
-    <div class="ctl"><input type="range" id="${o.id}-r" aria-label="${o.label}"><input type="number" id="${o.id}"><span class="u"></span></div>`;
+    <div class="ctl"><input autocomplete="off" type="range" id="${o.id}-r" aria-label="${o.label}"><input autocomplete="off" type="number" id="${o.id}"><span class="u"></span></div>`;
   parent.appendChild(row);
   const r = row.querySelector('input[type=range]'), n = row.querySelector('input[type=number]'), u = row.querySelector('.u');
   const c = { o, r, n, u,
@@ -1207,7 +1478,7 @@ function radios(name, key, after) {
     if (el.checked) { S[key] = el.value; after ? after() : changed(); }
   }));
 }
-radios('unit', 'unit', () => { controls.forEach((c) => c.refresh()); fillRes(); updateDims(); updateStats(); });
+radios('unit', 'unit', () => { controls.forEach((c) => c.refresh()); fillRes(); fillSimp(); updateDims(); updateStats(); applyVisibility(); updateExport(); });
 radios('shape', 'shape', () => { $('boxFields').hidden = S.shape !== 'box'; $('sphereFields').hidden = S.shape !== 'sphere'; changed(); });
 radios('boundary', 'boundary', () => { syncExact(); changed(); });
 function syncExact() {
@@ -1229,8 +1500,16 @@ function fillRes() {
     return `<option value="${r}" ${r === S.meshRes ? 'selected' : ''}>${txt}</option>`;
   }).join('');
 }
-fillRes();
-$('meshRes').addEventListener('change', (e) => { S.meshRes = +e.target.value; updateExport(); if (S.viewMesh) scheduleMesh(); });
+function fillSimp() {
+  const names = ['Off', 'Light', 'Medium', 'Strong'];
+  $('simplify').innerHTML = SIMP.map((f, i) => {
+    const txt = f ? `${names[i]}  (≤ ${fmtLen(f * S.thickness)} ${S.unit})` : names[i];
+    return `<option value="${f}" ${f === S.simplify ? 'selected' : ''}>${txt}</option>`;
+  }).join('');
+}
+fillRes(); fillSimp();
+$('meshRes').addEventListener('change', (e) => { S.meshRes = +e.target.value; cancelFinal(); updateExport(); if (S.viewMesh) scheduleMesh(); });
+$('simplify').addEventListener('change', (e) => { S.simplify = +e.target.value; cancelFinal(); updateExport(); });
 $('viewMesh').addEventListener('change', (e) => { S.viewMesh = e.target.checked; applyVisibility(); if (S.viewMesh && !meshIsCurrent()) scheduleMesh(0); });
 $('wire').addEventListener('change', (e) => { S.wire = e.target.checked; matMesh.wireframe = S.wire; matStrut.wireframe = S.wire; matFlare.wireframe = S.wire; });
 const HELP = {
@@ -1250,6 +1529,7 @@ const HELP = {
   surface: 'On: struts run along the outer surface and form a closed cage. Off: those struts are removed and the cells stay open at the surface.',
   meshres: 'Voxel size used to turn the struts into triangles. Smaller is smoother and more accurate, but slower and gives bigger files. A good starting point is about a sixth of the strut thickness, or finer.',
   mesh: 'View mesh shows the real solid instead of the strut preview. While you change settings it may use a coarser grid to stay quick. Wireframe shows the triangle edges. Process mesh builds the mesh at the chosen resolution, which is needed before downloading.',
+  simplify: 'Reduces the number of triangles after processing, so the file is smaller. Flat and gently curved areas, like the middle of each strut, get large triangles; the curved nodes keep their detail. The value in brackets is the largest allowed change in shape. The mesh stays closed and watertight and the outer size stays exact. Medium usually halves the file with no visible change.',
   export: 'Download the processed mesh as a file for printing or CAD.',
   format: 'STL is the usual format for 3D printing slicers. OBJ opens in most modelling tools and is a text file.',
   xunits: 'Units of the coordinates written to the file. Most slicers expect millimetres.',
@@ -1412,13 +1692,16 @@ function geomParams() {
 }
 const geomKey = () => JSON.stringify(geomParams());
 
-let tChange = null;
+let tChange = null, changePending = false;
 function changed() {
-  updateDims(); setOutline(); updateExport(); updateTrim();
-  clearTimeout(tChange);
+  cancelFinal();
+  fillSimp();
+  updateDims(); setOutline(); updateExport(); updateTrim(); saveSoon();
+  clearTimeout(tChange); changePending = true;
   tChange = setTimeout(requestSkeleton, 70);
 }
 function requestSkeleton() {
+  changePending = false;
   if (skBusy) { skPending = true; return; }
   skBusy = true; skPending = false;
   skParams = geomParams();
@@ -1427,7 +1710,7 @@ function requestSkeleton() {
 skWorker.onmessage = (e) => {
   const m = e.data;
   skBusy = false;
-  if (m.type === 'error') { showError(m.message); }
+  if (m.type === 'error') { showError(m.message); if (wantFinal && !skPending && !changePending) { wantFinal = false; setBusy(false); updateProcessBtn(); } }
   else {
     showError(null);
     sk = { ...m, key: JSON.stringify(skParams), params: skParams };
@@ -1438,7 +1721,8 @@ skWorker.onmessage = (e) => {
       note.hidden = false;
       note.textContent = `Only ${m.stats.fitted} of ${m.stats.requested} cells fit with a ${fmtLen(S.minCell)} ${S.unit} minimum cell size. Lower the minimum or enlarge the part.`;
     } else note.hidden = true;
-    if (S.viewMesh) scheduleMesh();
+    if (wantFinal && !skPending && !changePending) { wantFinal = false; runMesh(true); }
+    else if (S.viewMesh && !wantFinal) scheduleMesh();
     applyVisibility();
   }
   if (skPending) requestSkeleton();
@@ -1555,38 +1839,62 @@ function gridCount(voxel) {
   const e = S.shape === 'box' ? S.size : [1, 1, 1].map(() => 2 * S.radius);
   return e.reduce((p, x) => p * ((x + pad) / voxel + 1), 1);
 }
+let wantFinal = false; // Process clicked while the lattice was still updating
+function skCurrent() { return sk && !skBusy && !skPending && !changePending && sk.key === geomKey(); }
+function finalRunning() { return !!(meshWorker && meshState && meshState.final); }
+function cancelFinal() {
+  if (finalRunning()) { meshWorker.terminate(); meshWorker = null; meshState = null; setBusy(false); }
+  if (wantFinal) { wantFinal = false; setBusy(false); }
+  updateProcessBtn();
+}
+function updateProcessBtn() {
+  const b = $('process'), busy = finalRunning() || wantFinal;
+  b.disabled = busy; b.textContent = busy ? 'Processing…' : 'Process mesh';
+}
 function runMesh(final) {
   if (!sk) return;
-  if (finalMesh && finalMesh.key === sk.key && finalMesh.voxel <= (final ? S.meshRes : previewVoxel()) + 1e-9) {
-    showMesh(finalMesh, true); return;
-  }
+  if (!final && finalRunning()) return; // never interrupt a Process job for a live preview
+  if (final && finalReady()) { showMesh(finalMesh, true); return; }
+  if (!final && finalMesh && finalMesh.key === sk.key && finalMesh.voxel <= previewVoxel() + 1e-9) { showMesh(finalMesh, true); return; }
   const voxel = final ? S.meshRes : previewVoxel();
   const n = gridCount(voxel);
   if (n > 4e8) {
     showError(`That grid is too fine for this part size (${(n / 1e6).toFixed(0)} million voxels). Pick a coarser mesh resolution.`);
     return;
   }
+  showError(null);
   if (meshWorker) meshWorker.terminate();
   meshWorker = new Worker(workerURL);
   const id = ++meshId;
   const p = sk.params;
-  meshState = { key: sk.key, final, voxel };
-  setBusy(final ? `Processing mesh at ${fmtLen(voxel)} ${S.unit}…` : `Meshing preview at ${fmtLen(voxel)} ${S.unit}…`, 0);
+  const simplifyTol = final ? S.simplify * p.thickness : 0;
+  meshState = { key: sk.key, final, voxel, simplify: final ? S.simplify : 0 };
+  const base = final ? `Processing mesh at ${fmtLen(voxel)} ${S.unit}…` : `Meshing preview at ${fmtLen(voxel)} ${S.unit}…`;
+  setBusy(base, 0);
+  updateProcessBtn();
+  const fail = (msg) => {
+    if (meshWorker) meshWorker.terminate();
+    meshWorker = null; meshState = null;
+    setBusy(false); updateProcessBtn(); showError(msg);
+  };
+  meshWorker.onerror = (ev) => { ev.preventDefault && ev.preventDefault(); fail('Meshing failed, most likely because the browser ran out of memory. Try a coarser mesh resolution or fewer cells.'); };
   meshWorker.onmessage = (e) => {
     const m = e.data;
-    if (m.id !== meshId) return;
-    if (m.type === 'progress') { setBusy(null, m.f); return; }
-    meshWorker.terminate(); meshWorker = null;
-    if (m.type === 'error') { setBusy(false); showError(m.message); return; }
-    const res = { key: meshState.key, positions: m.positions, indices: m.indices, volume: m.volume, voxel: meshState.voxel, final: meshState.final };
+    if (m.id !== meshId || !meshState) return;
+    if (m.type === 'progress') { setBusy(m.label || null, m.f); return; }
+    if (m.type === 'error') { fail(m.message); return; }
+    const st = meshState;
+    meshWorker.terminate(); meshWorker = null; meshState = null;
+    const res = { key: st.key, positions: m.positions, indices: m.indices, volume: m.volume, voxel: st.voxel, final: st.final, simplify: st.simplify, trisBefore: m.trisBefore };
     if (res.final) finalMesh = res;
-    setBusy(false);
-    showMesh(res, res.final);
+    setBusy(false); updateProcessBtn();
+    if (sk && res.key === sk.key) showMesh(res, res.final);
+    else updateExport();
   };
   meshWorker.postMessage({
     type: 'mesh', id, V: sk.V.slice(), E: sk.E.slice(), CI: sk.CI.slice(), CO: sk.CO.slice(),
     r: p.thickness / 2, k: p.fillet * p.thickness * 0.25, voxel, shape: p.shape, size: p.size, radius: p.radius,
-    exact: p.exact, boundary: p.boundary,
+    exact: p.exact, boundary: p.boundary, simplifyTol,
   });
 }
 function showMesh(res, final) {
@@ -1602,8 +1910,9 @@ function showMesh(res, final) {
   const bbox = [bmax.x - bmin.x, bmax.y - bmin.y, bmax.z - bmin.z];
   let rmax = 0; const P = res.positions;
   for (let i = 0; i < P.length; i += 3) rmax = Math.max(rmax, P[i] * P[i] + P[i + 1] * P[i + 1] + P[i + 2] * P[i + 2]);
-  displayed = { key: res.key, final, voxel: res.voxel, tris: res.indices.length / 3, volume: res.volume, bbox, outerR: Math.sqrt(rmax) };
+  displayed = { key: res.key, final, voxel: res.voxel, tris: res.indices.length / 3, volume: res.volume, bbox, outerR: Math.sqrt(rmax), simplify: res.simplify || 0, trisBefore: res.trisBefore || 0 };
   if (final && !S.viewMesh) { S.viewMesh = true; $('viewMesh').checked = true; }
+  saveSoon();
   applyVisibility(); updateStats(); updateExport();
 }
 function applyVisibility() {
@@ -1615,19 +1924,25 @@ function applyVisibility() {
   const hint = $('meshHint');
   if (!S.viewMesh) hint.textContent = 'Preview shows struts only. Tick View mesh to see the solid.';
   else if (displayed && meshIsCurrent()) hint.textContent = displayed.final
-    ? `Showing the processed mesh (${fmtLen(displayed.voxel)} ${S.unit}).`
+    ? `Showing the processed mesh (${fmtLen(displayed.voxel)} ${S.unit}${displayed.simplify ? `, simplified from ${displayed.trisBefore.toLocaleString('en-US')} triangles` : ''}).`
     : Math.abs(displayed.voxel - S.meshRes) < 1e-9
       ? `Showing the mesh at ${fmtLen(displayed.voxel)} ${S.unit}. Process mesh to make it downloadable.`
       : `Showing a coarser preview mesh (${fmtLen(displayed.voxel)} ${S.unit}). Process mesh builds it at ${fmtLen(S.meshRes)} ${S.unit}.`;
   else hint.textContent = 'Building the mesh preview…';
 }
-$('process').addEventListener('click', () => { clearTimeout(tMesh); runMesh(true); });
+$('process').addEventListener('click', () => {
+  clearTimeout(tMesh);
+  showError(null);
+  if (!skCurrent()) { wantFinal = true; setBusy('Updating the lattice…', null); updateProcessBtn(); return; }
+  runMesh(true);
+});
 
 // ---------------- UI feedback ----------------
 function setBusy(text, f) {
   const el = $('busy');
   if (text === false) { el.hidden = true; $('bar').style.width = '0'; return; }
   if (text) { el.hidden = false; el.textContent = text; el.dataset.base = text; }
+  else if (f != null) el.hidden = false;
   if (f != null) { $('bar').style.width = (f * 100).toFixed(1) + '%'; el.textContent = `${el.dataset.base} ${Math.round(f * 100)}%`; }
 }
 function showError(msg) { const el = $('err'); el.hidden = !msg; el.textContent = msg || ''; }
@@ -1658,7 +1973,10 @@ function updateStats() {
   }
   $('stats').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
 }
-function finalReady() { return finalMesh && sk && finalMesh.key === sk.key && Math.abs(finalMesh.voxel - S.meshRes) < 1e-9; }
+function finalReady() {
+  return !!(finalMesh && sk && finalMesh.key === sk.key && finalMesh.key === geomKey() && !changePending
+    && Math.abs(finalMesh.voxel - S.meshRes) < 1e-9 && finalMesh.simplify === S.simplify);
+}
 function updateExport() {
   const ok = finalReady();
   const btn = $('download');
@@ -1676,9 +1994,13 @@ function updateExport() {
 
 // ---------------- export ----------------
 function fileBase() {
-  const p = sk.params;
-  const dims = p.shape === 'box' ? `${p.size.map((x) => +x.toFixed(2)).join('x')}mm` : `R${+p.radius.toFixed(2)}mm`;
-  return `voronoi_${p.shape}_${dims}_n${sk.stats.fitted}_t${+p.thickness.toFixed(3)}_f${Math.round(p.fillet * 100)}_seed${p.seed}`;
+  // e.g. 261015_VLG_box_20x20x20mm  /  261015_VLG_sphere_R10mm  (date = day of download, YYMMDD)
+  const p = sk.params, d = new Date(), u = S.xu;
+  const two = (x) => String(x).padStart(2, '0');
+  const ymd = two(d.getFullYear() % 100) + two(d.getMonth() + 1) + two(d.getDate());
+  const L = (mm) => +(u === 'in' ? mm / 25.4 : mm).toFixed(u === 'in' ? 3 : 2);
+  const dims = p.shape === 'box' ? `${p.size.map(L).join('x')}${u}` : `R${L(p.radius)}${u}`;
+  return `${ymd}_VLG_${p.shape}_${dims}`;
 }
 function buildSTL(pos, idx, sc) {
   const nT = idx.length / 3, buf = new ArrayBuffer(84 + 50 * nT), dv = new DataView(buf);
@@ -1738,7 +2060,7 @@ $('download').addEventListener('click', async () => {
   btn.disabled = true; btn.textContent = 'Preparing file…';
   try {
     const sc = S.xu === 'in' ? 1 / 25.4 : 1;
-    const name = `${fileBase()}${S.xu === 'in' ? '_inch' : ''}.${S.fmt}`;
+    const name = `${fileBase()}.${S.fmt}`;
     const blob = S.fmt === 'stl' ? buildSTL(finalMesh.positions, finalMesh.indices, sc) : buildOBJ(finalMesh.positions, finalMesh.indices, sc, S.xu);
     let done = false;
     if (window.claude && typeof window.claude.use === 'function') {
@@ -1766,9 +2088,20 @@ $('download').addEventListener('click', async () => {
 });
 
 // ---------------- boot ----------------
+function syncUI() {
+  const setR = (name, val) => document.querySelectorAll(`input[name=${name}]`).forEach((el) => { el.checked = el.value === String(val); });
+  setR('unit', S.unit); setR('shape', S.shape); setR('boundary', S.boundary); setR('fmt', S.fmt); setR('xu', S.xu);
+  $('surface').checked = S.surfaceStruts; $('viewMesh').checked = S.viewMesh; $('wire').checked = S.wire;
+  matMesh.wireframe = S.wire; matStrut.wireframe = S.wire; matFlare.wireframe = S.wire;
+  $('seed').value = S.seed;
+  $('boxFields').hidden = S.shape !== 'box'; $('sphereFields').hidden = S.shape !== 'sphere';
+  controls.forEach((c) => c.refresh()); fillRes(); fillSimp(); syncExact();
+}
+syncUI();
+window.addEventListener('pageshow', syncUI);
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0;
-updateDims(); setOutline(); updateTrim(); fitView(); updateExport(); requestSkeleton();
+updateDims(); setOutline(); updateTrim(); fitView(); updateExport(); applyVisibility(); updateProcessBtn(); requestSkeleton();
 </script>
 
 </body>

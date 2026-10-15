@@ -84,7 +84,8 @@ VOXEL_SIZE = None              # mesh resolution [mm]; None = thickness / 6
                                #   smaller = smoother but slower / bigger file
 MIN_EDGE_FRAC = 0.5            # merge nodes closer than this x thickness
                                #   (removes tiny edges that create blobs)
-OUTPUT = None                  # file name (.stl or .obj); None = auto name
+OUTPUT = None                  # file name (.stl or .obj); None = auto name, e.g.
+                               #   261015_VLG_box_20x20x20mm.stl
                                #   (saved next to this script)
 PREVIEW = False                # True = show a quick matplotlib preview of the struts
 
@@ -668,9 +669,9 @@ def build(shape="box", size=BOX_SIZE, radius=SPHERE_RADIUS, n_cells=N_CELLS,
         faces = faces[:, ::-1]
 
     if output is None:
+        # same pattern as the web tool: YYMMDD_VLG_box_20x20x20mm.stl / YYMMDD_VLG_sphere_R10mm.stl
         dims = (f"{size[0]:g}x{size[1]:g}x{size[2]:g}mm" if shape == "box" else f"R{radius:g}mm")
-        output = (f"voronoi_{shape}_{dims}_n{len(seeds)}_t{thickness:g}_"
-                  f"f{fillet:g}_seed{seed}.stl")
+        output = f"{time.strftime('%y%m%d')}_VLG_{shape}_{dims}.stl"
     if not os.path.isabs(output):
         output = os.path.join(os.path.dirname(os.path.abspath(__file__)), output)
     (write_obj if output.lower().endswith(".obj") else write_stl)(output, verts, faces)
