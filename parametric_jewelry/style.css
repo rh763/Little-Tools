@@ -198,9 +198,10 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 #viewFields { width: 230px; }
 #viewFields .ctl { grid-template-columns: 1fr 58px 22px; }
 .vlbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-.finger-pick svg { display: block; width: 120px; margin: 4px auto 0; }
-.finger-pick .palm { fill: #d6d6da; stroke: var(--ink); stroke-width: 1.2; }
-.finger-pick [data-finger] { fill: var(--paper); stroke: var(--ink); stroke-width: 1.2; cursor: pointer; outline: none; }
-.finger-pick [data-finger]:hover, .finger-pick [data-finger]:focus-visible { fill: #f7f2a0; }
+.finger-pick svg { display: block; width: 104px; margin: 2px auto 0; }
+/* flat pictogram: palm and fingers in one soft grey, thin white gaps between the fingers */
+.finger-pick .palm { fill: #c4c4cb; pointer-events: none; }
+.finger-pick [data-finger] { fill: #c4c4cb; stroke: #fff; stroke-width: 2.5; cursor: pointer; outline: none; transition: fill 0.12s; }
+.finger-pick [data-finger]:hover, .finger-pick [data-finger]:focus-visible { fill: #9d9da8; }
 .finger-pick [data-finger].on { fill: var(--signal); }
 @media (prefers-reduced-motion: reduce) { .progress span { transition: none; } }
