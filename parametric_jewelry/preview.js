@@ -166,9 +166,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const REF = './reference model/';
 const HAND = 'Hand and Forearm - Full.stl', HEAD = 'young_woman_age_20-25_bald_head.glb';
 const refCache = {};
-// Earrings come in pairs: the head's mid-plane is at x = -71.3 in the earring frame, so the
-// mirrored copy for the right ear is the piece reflected in x and moved to x = 2 * -71.3.
-export const EAR_PAIR_X = -142.6;
+// Earrings come in pairs: the head's mid-plane is at x = -71.3 + 3 = -68.3 in the earring frame
+// (default ear offset included), so the mirrored copy for the right ear is the piece reflected
+// in x and moved to x = 2 * -68.3.
+export const EAR_PAIR_X = -136.6;
 function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
   if (!refCache[name]) refCache[name] = new Promise((res, rej) => {
     const url = encodeURI(REF + name);
@@ -227,7 +228,9 @@ function refPlacement(P) {
     return [HEAD, m];
   }
   if (P.cat === 'tiara') { const s = P.rin / 70; k = 259.2 * s; t = [0, -22.9 * s, -205.6 * s]; } // crown circle = rin
-  else { k = 220; t = [-0.324 * k, 0.045 * k - 3, 1.78 - 0.215 * k + 8.6]; } // left ear lobe pierced by the top of the hook
+  // left ear lobe pierced by the top of the hook; the trailing (+3, -1, +4.5) mm is the hand-tuned
+  // default spot (the page's ear sliders start at 0 and move relative to it)
+  else { k = 220; t = [-0.324 * k + 3, 0.045 * k - 3 - 1, 1.78 - 0.215 * k + 8.6 + 4.5]; }
   m.set(-k, 0, 0, t[0], 0, 0, k, t[1], 0, k, 0, t[2], 0, 0, 0, 1);
   return [HEAD, m];
 }

@@ -29,7 +29,7 @@ const DEF = {
   ring:    { rin: 8.6, T: 1.8, W: 6, round: 0.5, tilt: 0, rise: 0, spread: 0.18, nU: 24, nV: 2, nW: 1, twist: 0, thick: 0.45, rim: 0.4 },
   bangle:  { rin: 30, T: 3, W: 14, round: 0.5, tilt: 0, rise: 0, spread: 0.18, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
   tiara:   { rin: 70, T: 2, W: 10, span: 150, round: 0.5, tilt: 10, rise: 25, spread: 0.16, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
-  earring: { D: 16, elong: 1.3, nU: 1, thick: 0.45, rim: 0, earX: -3, earY: 1, earZ: -4.5 },
+  earring: { D: 16, elong: 1.3, nU: 1, thick: 0.45, rim: 0, earX: 0, earY: 0, earZ: 0 }, // ear sliders are offsets from the fitted spot in preview.js
   choker:  { rin: 52, gap: 12, T: 2, W: 16, round: 0.5, tilt: 0, rise: 6, spread: 0.2, nU: 60, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
 };
 const isOpen = (c) => c === 'tiara' || c === 'choker';
@@ -283,7 +283,6 @@ const fingerEls = document.querySelectorAll('#fingerPick [data-finger]');
 const pickFinger = (el) => {
   S.finger = el.dataset.finger;
   fingerEls.forEach((f) => f.classList.toggle('on', f === el));
-  $('fingerName').textContent = el.getAttribute('aria-label');
   updateMannequin(params());
 };
 fingerEls.forEach((el) => {
