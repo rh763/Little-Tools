@@ -382,7 +382,10 @@ function makeField(P) {
   if (P.cat === 'earring') {
     const a = P.D / 2, c = a * P.elong, cell = P.D / Math.max(P.nU, 1);
     const Rl = 1.6, wire = 0.9, zl = Rl + wire * 0.2;
-    const bb = { lo: [-a - 1, -a - 1, -2 * c - 1], hi: [a + 1, a + 1, zl + Rl + wire + 1] };
+    // French ear hook (0.8 mm wire): stem up from the loop, arc over the top (this passes
+    // through the lobe, front to back), then a 6 mm tail hanging behind
+    const zs = zl + Rl - 0.2, z0 = zl + Rl + 9, Rh = 3, hw = 0.4;
+    const bb = { lo: [-a - 1, Math.min(-a - 1, -2 * Rh - 1.5), -2 * c - 1], hi: [a + 1, a + 1, z0 + Rh + 1.5] };
     const f = (x, y, z) => {
       const px = x / a, py = y / a, pz = (z + c) / c;
       const k0 = Math.hypot(px, py, pz), k1 = Math.hypot(px / a, py / a, pz / c) || 1e-9;
@@ -390,7 +393,11 @@ function makeField(P) {
       let s = Math.max(d, tpmsDist(x / cell, y / cell, z / cell, cell));
       if (P.rim > 0) s = Math.min(s, Math.max(d, -(d + P.rim)));
       const loop = Math.hypot(Math.hypot(y, z - zl) - Rl, x) - wire / 2;
-      return Math.min(s, loop);
+      const d1 = Math.hypot(y, z - Math.min(Math.max(z, zs), z0));
+      const d3 = Math.hypot(y + 2 * Rh, z - Math.min(Math.max(z, z0 - 6), z0));
+      const da = z > z0 ? Math.abs(Math.hypot(y + Rh, z - z0) - Rh) : 1e3;
+      const hook = Math.hypot(Math.min(d1, d3, da), x) - hw;
+      return Math.min(s, loop, hook);
     };
     return { f, bb };
   }

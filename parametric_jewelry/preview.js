@@ -35,7 +35,12 @@ float field(vec3 p) {
     float s = max(d, tpd(p.x / cell, p.y / cell, p.z / cell, cell));
     if (uRim > 0.0) s = min(s, max(d, -(d + uRim)));
     float lp = length(vec2(length(vec2(p.y, p.z - zl)) - Rl, p.x)) - wr * 0.5;
-    return min(s, lp);
+    float zs = zl + Rl - 0.2, z0 = zl + Rl + 9.0, Rh = 3.0; // ear hook, same as worker.js
+    float d1 = length(vec2(p.y, p.z - clamp(p.z, zs, z0)));
+    float d3 = length(vec2(p.y + 2.0 * Rh, p.z - clamp(p.z, z0 - 6.0, z0)));
+    float da = p.z > z0 ? abs(length(vec2(p.y + Rh, p.z - z0)) - Rh) : 1e3;
+    float hk = length(vec2(min(min(d1, d3), da), p.x)) - 0.4;
+    return min(min(s, lp), hk);
   }
   float r = length(p.xy), Rmid = uRin + uT * 0.5;
   float th = atan(p.y, p.x) - PI * 0.5;
@@ -161,6 +166,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const REF = './reference model/';
 const HAND = 'Hand and Forearm - Full.stl', HEAD = 'young_woman_age_20-25_bald_head.glb';
 const refCache = {};
+// Earrings come in pairs: the head's mid-plane is at x = -71.3 in the earring frame, so the
+// mirrored copy for the right ear is the piece reflected in x and moved to x = 2 * -71.3.
+export const EAR_PAIR_X = -142.6;
 function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
   if (!refCache[name]) refCache[name] = new Promise((res, rej) => {
     const url = encodeURI(REF + name);
@@ -177,15 +185,22 @@ function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
 // head: raw (gx, gy, gz) -> piece (-gx, gz, gy) * k + t (face to +Y).
 function refPlacement(P) {
   const m = new THREE.Matrix4();
-  if (P.cat === 'ring' || P.cat === 'bangle') {
-    const [c, r0] = P.cat === 'ring' ? [[-15.5, 4, 592], 10.4 / 0.96] : [[22.6, 2.6, 462], 27 / 0.92];
+  if (P.cat === 'ring') { // ring finger in the scan is tilted ~38 deg from Z: rotate its axis onto Z
+    // axis + base of the finger from a circle fit of the scan; finger radius there is ~8.8 mm
+    const c = new THREE.Vector3(-7.5, 2.0, 619.4), a = new THREE.Vector3(0.6, 0.118, 0.791).normalize();
+    const k = P.rin / 8.8, q = new THREE.Quaternion().setFromUnitVectors(a, new THREE.Vector3(0, 0, 1));
+    m.compose(new THREE.Vector3(), q, new THREE.Vector3(k, k, k)).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+    return [HAND, m];
+  }
+  if (P.cat === 'bangle') {
+    const c = [22.6, 2.6, 462], r0 = 27 / 0.92;
     const k = P.rin / r0;
     m.set(k, 0, 0, -k * c[0], 0, k, 0, -k * c[1], 0, 0, k, -k * c[2], 0, 0, 0, 1);
     return [HAND, m];
   }
   let k, t;
   if (P.cat === 'tiara') { const s = P.rin / 70; k = 259.2 * s; t = [0, -22.9 * s, -205.6 * s]; } // crown circle = rin
-  else { k = 220; t = [-0.324 * k, 0.045 * k, 1.78 - 0.215 * k]; } // left ear lobe at the hook
+  else { k = 220; t = [-0.324 * k, 0.045 * k - 3, 1.78 - 0.215 * k + 8.6]; } // left ear lobe pierced by the top of the hook
   m.set(-k, 0, 0, t[0], 0, 0, k, t[1], 0, k, 0, t[2], 0, 0, 0, 1);
   return [HEAD, m];
 }

@@ -225,12 +225,25 @@ const iv = PV ? PV.makeImplicitView() : null;
 if (iv) root.add(iv.object);
 const matBody = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, metalness: 0 });
 let manObj = null;
+// earring pair: on the body a mirrored copy hangs from the other ear
+const pair = new THREE.Group(); pair.scale.x = -1; pair.position.x = PV ? PV.EAR_PAIR_X : 0; pair.visible = false; root.add(pair);
+const ivR = PV ? PV.makeImplicitView() : null;
+if (ivR) pair.add(ivR.object);
+const meshR = new THREE.Mesh(new THREE.BufferGeometry(), matMesh); pair.add(meshR);
+function syncPair() { // called every frame: copy the left piece's state to the mirrored one
+  pair.visible = S.cat === 'earring' && !!PV && $('man').checked;
+  if (!pair.visible) return;
+  if (ivR) ivR.object.visible = !!(iv && iv.object.visible);
+  meshR.visible = !!(meshObj && meshObj.visible);
+  if (meshObj && meshR.geometry !== meshObj.geometry) meshR.geometry = meshObj.geometry;
+}
 function updateImplicit(P) {
   if (!iv) return;
   try {
     const src = P.kind === 'custom' ? P.expr : TPMS[P.kind] || TPMS.gyroid;
     const plastic = S.metal === 'resin' || S.metal === 'pla';
     iv.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic);
+    if (ivR && P.cat === 'earring') ivR.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic);
     iv.object.visible = true;
     if (meshObj) meshObj.visible = false;
   } catch (e) { iv.object.visible = false; if (meshObj) meshObj.visible = true; }
@@ -247,7 +260,7 @@ function resize() {
   camera.aspect = r.width / Math.max(r.height, 1); camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(canvas.parentElement); resize();
-(function loop() { orbit.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+(function loop() { orbit.update(); syncPair(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
 function fitView() {
   const bb = lastBB || makeField(params()).bb;
   const c = bb.lo.map((v, i) => (v + bb.hi[i]) / 2), R = Math.hypot(...bb.lo.map((v, i) => bb.hi[i] - v)) / 2;
@@ -280,7 +293,10 @@ function params() {
   const closed = c !== 'tiara', N = closed ? 32 : 33;
   for (let i = 0; i < N; i++) {
     const s = closed ? i / N : i / (N - 1);
-    P.top.push(p.rise * Math.exp(-(((s - 0.5) / p.spread) ** 2))); P.bot.push(0);
+    const g = Math.exp(-(((s - 0.5) / p.spread) ** 2));
+    // tiara: tall centre peak with smaller scalloped peaks stepping down to the sides
+    const sc = c === 'tiara' ? 0.72 + 0.28 * Math.cos(2 * Math.PI * 6 * (s - 0.5)) : 1;
+    P.top.push(p.rise * g * sc); P.bot.push(0);
   }
   return P;
 }
@@ -368,13 +384,27 @@ function updateStats() {
   if (!vol) { $('stats').innerHTML = ''; return; }
   const m = metal(), g = (vol / 1000) * m[2];
   const rows = [[finalMesh ? 'Volume' : 'Volume (preview)', `${fmt(vol / 1000, 3)} cm\u00b3`], ['Est. weight', `${fmt(g, 2)} g`]];
+  if (S.cat === 'earring') rows.push(['Pair weight', `${fmt(2 * g, 2)} g`]);
   if (finalMesh) rows.push(['Triangles', (finalMesh.indices.length / 3).toLocaleString()]);
   $('stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
 }
 function updateExport() {
   const ok = !!finalMesh && finalMesh.key === keyOf();
   $('download').disabled = !ok;
-  $('dlHint').textContent = ok ? `Ready: ${S.cat} at ${S.res} mm.` : 'Process the mesh first.';
+  $('dlHint').textContent = ok ? `Ready: ${S.cat === 'earring' ? 'earring pair (left + mirrored right)' : S.cat} at ${S.res} mm.` : 'Process the mesh first.';
+}
+function earringPair(pos, idx) { // left piece + mirrored right piece, side by side 4 mm apart
+  const n = pos.length, nv = n / 3, P2 = new Float32Array(2 * n), I2 = new Uint32Array(2 * idx.length);
+  let hx = -Infinity;
+  for (let i = 0; i < n; i += 3) hx = Math.max(hx, pos[i]);
+  const m2 = 2 * (hx + 2);
+  P2.set(pos); I2.set(idx);
+  for (let i = 0; i < n; i += 3) { P2[n + i] = m2 - pos[i]; P2[n + i + 1] = pos[i + 1]; P2[n + i + 2] = pos[i + 2]; }
+  for (let t = 0; t < idx.length; t += 3) { // mirroring flips orientation, so swap two corners
+    const o = idx.length + t;
+    I2[o] = idx[t] + nv; I2[o + 1] = idx[t + 2] + nv; I2[o + 2] = idx[t + 1] + nv;
+  }
+  return { pos: P2, idx: I2 };
 }
 function toSTL(pos, idx, sc) {
   const n = idx.length / 3, buf = new ArrayBuffer(84 + 50 * n), dv = new DataView(buf);
@@ -401,10 +431,12 @@ function toOBJ(pos, idx, sc) {
 $('download').addEventListener('click', () => {
   if (!finalMesh) return;
   const sc = S.xu === 'in' ? 1 / 25.4 : 1;
-  const blob = S.fmt === 'stl' ? toSTL(finalMesh.positions, finalMesh.indices, sc) : toOBJ(finalMesh.positions, finalMesh.indices, sc);
+  let pos = finalMesh.positions, idx = finalMesh.indices;
+  if (S.cat === 'earring') ({ pos, idx } = earringPair(pos, idx));
+  const blob = S.fmt === 'stl' ? toSTL(pos, idx, sc) : toOBJ(pos, idx, sc);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `tpms_${S.cat}_${cur().kind}_${S.res}mm.${S.fmt}`;
+  a.download = `tpms_${S.cat}${S.cat === 'earring' ? '_pair' : ''}_${cur().kind}_${S.res}mm.${S.fmt}`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 });
