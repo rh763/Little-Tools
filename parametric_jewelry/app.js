@@ -236,7 +236,7 @@ function updateImplicit(P) {
   } catch (e) { iv.object.visible = false; if (meshObj) meshObj.visible = true; }
 }
 function updateMannequin(P) {
-  if (manObj) { root.remove(manObj); manObj.traverse((o) => o.geometry && o.geometry.dispose()); manObj = null; }
+  if (manObj) { root.remove(manObj); manObj.traverse((o) => o.geometry && !o.userData.shared && o.geometry.dispose()); manObj = null; }
   if (!PV || !$('man').checked) return;
   manObj = PV.makeMannequin(P, matBody); root.add(manObj);
 }
