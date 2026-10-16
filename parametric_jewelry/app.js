@@ -1,9 +1,21 @@
 // Parametric TPMS jewelry: UI, three.js viewer, worker orchestration, export.
 // Geometry lives in worker.js (also loaded on this page as a classic script, so
 // makeField / compileExpr / TPMS are globals here too).
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+// Loaded as a classic script (not type="module") so the page also works when
+// opened straight from disk (file://), where Chrome blocks local module scripts.
+(async () => {
+'use strict';
+let THREE, OrbitControls, RoomEnvironment;
+try {
+  THREE = await import('three');
+  ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  ({ RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js'));
+} catch (e) {
+  const el = document.getElementById('err');
+  el.textContent = 'Could not load three.js from the CDN (check your internet connection): ' + (e.message || e);
+  el.hidden = false;
+  return;
+}
 
 const $ = (id) => document.getElementById(id);
 const fmt = (v, d = 2) => (+v.toFixed(d)).toString();
@@ -368,3 +380,4 @@ $('download').addEventListener('click', () => {
 // ---------------- go ----------------
 buildFields();
 changed(true);
+})();
