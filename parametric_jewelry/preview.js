@@ -187,16 +187,26 @@ function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
 // of the scan; finger radius there is ~8.8 mm (refit on circle centres, z = -5..25 mm past the base)
 const RING_C = new THREE.Vector3(-15.5, 4.2, 590), RING_A = (() => { const tilt = -30 * Math.PI / 180, az = 20 * Math.PI / 180;
   return new THREE.Vector3(Math.sin(tilt) * Math.cos(az), Math.sin(tilt) * Math.sin(az), Math.cos(tilt)); })();
+// Other fingers: the ring-finger placement above carried onto each finger's own axis (axes from
+// centre-line fits of the scan). s = finger radius there relative to the ring finger.
+const FINGERS = {
+  ring: { c: RING_C, a: RING_A, s: 1 },
+  thumb: { c: new THREE.Vector3(35.62, 66.28, 566.40), a: new THREE.Vector3(-0.4901, -0.0412, 0.8707).normalize(), s: 0.975 },
+  index: { c: new THREE.Vector3(-7.81, 48.74, 605.19), a: new THREE.Vector3(-0.5525, -0.1506, 0.8198).normalize(), s: 1.141 },
+  middle: { c: new THREE.Vector3(-13.76, 26.47, 592.57), a: new THREE.Vector3(-0.4792, -0.1530, 0.8643).normalize(), s: 0.971 },
+  pinky: { c: new THREE.Vector3(-8.99, -19.30, 582.98), a: new THREE.Vector3(-0.3180, -0.1472, 0.9366).normalize(), s: 0.996 },
+};
+const fingerOf = (P) => FINGERS[P.finger] || FINGERS.ring;
 // On the body the arm stands upright (same pose as for the bangle) and the ring is tilted onto
 // the finger instead: app.js applies this rotation to the piece + mannequin when "Show on body" is on.
 export function wearRotation(P) {
-  return P.cat === 'ring' ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), RING_A) : new THREE.Quaternion();
+  return P.cat === 'ring' ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), fingerOf(P).a) : new THREE.Quaternion();
 }
 function refPlacement(P) {
   const m = new THREE.Matrix4();
   if (P.cat === 'ring') { // rotate the finger axis onto Z; wearRotation() turns the whole set back upright
-    const c = RING_C, a = RING_A;
-    const k = P.rin / 10.1, q = new THREE.Quaternion().setFromUnitVectors(a, new THREE.Vector3(0, 0, 1));
+    const { c, a, s } = fingerOf(P);
+    const k = P.rin / (10.1 * s), q = new THREE.Quaternion().setFromUnitVectors(a, new THREE.Vector3(0, 0, 1));
     m.compose(new THREE.Vector3(), q, new THREE.Vector3(k, k, k)).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
     return [HAND, m];
   }

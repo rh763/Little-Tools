@@ -115,7 +115,22 @@
       <div class="progress" aria-hidden="true"><span id="bar"></span></div>
       <div class="status" id="status" aria-live="polite"></div>
       <div class="vtop"><button type="button" class="vbtn" id="fit">Fit view</button></div>
-      <div class="vright"><label class="chk vchk"><input autocomplete="off" type="checkbox" id="man" checked><span class="box"></span><span>Show on body</span></label></div>
+      <!-- preview-only settings (do not change the exported geometry) live here, on the right of the viewport -->
+      <div class="vright">
+        <label class="chk vchk"><input autocomplete="off" type="checkbox" id="man" checked><span class="box"></span><span>Show on body</span></label>
+        <div id="fingerPick" class="finger-pick" hidden>
+          <div class="vlbl">Worn on: <b id="fingerName">ring finger</b></div>
+          <svg viewBox="0 0 120 130" role="group" aria-label="Click a finger to wear the ring on it">
+            <rect class="palm" x="22" y="58" width="64" height="62" rx="16"/>
+            <rect data-finger="pinky" aria-label="little finger" role="button" tabindex="0" x="22" y="34" width="14" height="40" rx="7" transform="rotate(-10 29 74)"><title>Little finger</title></rect>
+            <rect data-finger="ring" class="on" aria-label="ring finger" role="button" tabindex="0" x="38" y="16" width="14" height="56" rx="7"><title>Ring finger</title></rect>
+            <rect data-finger="middle" aria-label="middle finger" role="button" tabindex="0" x="54" y="8" width="14" height="62" rx="7"><title>Middle finger</title></rect>
+            <rect data-finger="index" aria-label="index finger" role="button" tabindex="0" x="70" y="18" width="14" height="52" rx="7"><title>Index finger</title></rect>
+            <rect data-finger="thumb" aria-label="thumb" role="button" tabindex="0" x="86" y="62" width="14" height="42" rx="7" transform="rotate(45 93 104)"><title>Thumb</title></rect>
+          </svg>
+        </div>
+        <div id="viewFields" class="group" hidden></div>
+      </div>
       <div class="busy" id="busy" hidden></div>
       <div class="err" id="err" role="alert" hidden></div>
       <div class="dims" id="dims"></div>
