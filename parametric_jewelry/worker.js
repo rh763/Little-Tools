@@ -302,7 +302,7 @@ function compileExpr(src) {
   if (/[^0-9a-zA-Z_+\-*/^().,\s]/.test(src)) throw new Error('Only numbers, x y z, + - * / ^ ( ) and math functions are allowed.');
   const ids = src.match(/[a-zA-Z_]\w*/g) || [];
   for (const id of ids) if (!ALLOWED.has(id)) throw new Error(`Unknown name "${id}".`);
-  const body = src.replace(/\^/g, '**');
+  const body = src.replace(/\^/g, '**').replace(/(^|[(,+\-*/]\s*)-\s*([a-zA-Z_]\w*|\d*\.?\d+)\s*\*\*/g, '$1-1*$2**');
   let fn;
   try {
     fn = new Function('x', 'y', 'z', `const {sin,cos,tan,abs,sqrt,exp,log,pow,min,max,floor,sign,atan,asin,acos,sinh,cosh,tanh}=Math;const pi=Math.PI,PI=Math.PI;return (${body});`);
@@ -325,7 +325,38 @@ function compileExpr(src) {
     if (isFinite(g) && g > 1e-6 && Math.abs(v) < 0.25 * g) { gs += g; gn++; }
   }
   const norm = gn ? gn / gs : 1;
-  return (x, y, z) => fn(x, y, z) * norm;
+  const out = (x, y, z) => fn(x, y, z) * norm;
+  out.norm = norm;
+  return out;
+}
+
+// Translate a whitelisted formula into a GLSL expression (for the ray-marched preview).
+function exprGLSL(src) {
+  compileExpr(src); // validates
+  const toks = src.match(/\d*\.?\d+(?:e[+-]?\d+)?|[a-zA-Z_]\w*|[-+*/^(),]/gi) || [];
+  let i = 0;
+  const peek = () => toks[i], next = () => toks[i++];
+  const num = (t) => (/[.e]/i.test(t) ? t : t + '.0');
+  function primary() {
+    const t = next();
+    if (t === undefined) throw new Error('Syntax error in formula.');
+    if (t === '(') { const e = add(); next(); return `(${e})`; }
+    if (t === '-') return `(-${power()})`;
+    if (t === '+') return power();
+    if (/^[\d.]/.test(t)) return num(t);
+    if (t === 'pi' || t === 'PI') return '3.14159265359';
+    if (/^[xyz]$/.test(t)) return t;
+    next(); // '('
+    const args = [add()];
+    while (peek() === ',') { next(); args.push(add()); }
+    next(); // ')'
+    return `${t === 'pow' ? 'pw' : t}(${args.join(',')})`;
+  }
+  function power() { const b = primary(); if (peek() === '^') { next(); return `pw(${b},${unary()})`; } return b; }
+  function unary() { if (peek() === '-') { next(); return `(-${unary()})`; } return power(); }
+  function mul() { let a = unary(); while (peek() === '*' || peek() === '/') { const o = next(); a = `(${a}${o}${unary()})`; } return a; }
+  function add() { let a = mul(); while (peek() === '+' || peek() === '-') { const o = next(); a = `(${a}${o}${mul()})`; } return a; }
+  return add();
 }
 
 // ===================== jewelry field (mm, Z up, front = +Y) =====================
@@ -366,7 +397,9 @@ function makeField(P) {
   const closed = P.cat !== 'tiara';
   const T = P.T, Rmid = P.rin + T / 2, span = closed ? TAU : P.span * Math.PI / 180;
   const tanT = Math.tan((P.tilt || 0) * Math.PI / 180);
-  const cu = span * Rmid / P.nU, cw = T / P.nW;
+  // cells are roughly cubic (depth = mean of around/across size, scaled by nW), so a thin band
+  // slices through the lattice and stays see-through instead of packing a whole cell into T
+  const cu = span * Rmid / P.nU, cw = (cu + P.W / P.nV) / 2 / (P.nW || 1);
   // z extents
   let zmin = Infinity, zmax = -Infinity;
   for (let i = 0; i <= 200; i++) {
@@ -393,9 +426,9 @@ function makeField(P) {
     let d = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - rr;
     if (!closed) d = Math.max(d, (Math.abs(th) - span / 2) * Math.max(r, 1));
     const cv = 2 * h / P.nV, cmin = Math.min(cu * r / Rmid, cv, cw);
-    const U = s * P.nU, V = (zz - zc) / (2 * h) * P.nV + (P.twist || 0) * s, W = (w / T + 0.5) * P.nW;
+    const U = s * P.nU, V = (zz - zc) / (2 * h) * P.nV + (P.twist || 0) * s, W = w / cw;
     let out = Math.max(d, tpmsDist(U, V, W, cmin));
-    if (P.rim > 0) out = Math.min(out, Math.max(d, -(Math.min(zz - bot, top - zz) - P.rim)));
+    if (P.rim > 0) out = Math.min(out, Math.max(d, Math.min(zz - bot, top - zz) - P.rim));
     return out;
   };
   return { f, bb };
@@ -501,7 +534,7 @@ function removeIslands(positions, indices, keepFrac = 0.05) {
   return { positions: new Float32Array(outP), indices: outI, islands };
 }
 
-if (typeof module !== 'undefined') module.exports = { TPMS, compileExpr, makeField, meshField, simplifyMesh, meshVolume, removeIslands, MC };
+if (typeof module !== 'undefined') module.exports = { TPMS, compileExpr, exprGLSL, makeField, meshField, simplifyMesh, meshVolume, removeIslands, MC };
 if (typeof self !== 'undefined' && typeof window === 'undefined' && typeof module === 'undefined') {
   self.onmessage = (e) => {
     const m = e.data;

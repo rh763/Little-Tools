@@ -1,9 +1,25 @@
 // Parametric TPMS jewelry: UI, three.js viewer, worker orchestration, export.
 // Geometry lives in worker.js (also loaded on this page as a classic script, so
 // makeField / compileExpr / TPMS are globals here too).
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+// Loaded as a classic script (not type="module") so the page also works when
+// opened straight from disk (file://), where Chrome blocks local module scripts.
+(async () => {
+'use strict';
+let THREE, OrbitControls, RoomEnvironment;
+try {
+  THREE = await import('three');
+  ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  ({ RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js'));
+} catch (e) {
+  const el = document.getElementById('err');
+  el.textContent = 'Could not load three.js from the CDN (check your internet connection): ' + (e.message || e);
+  el.hidden = false;
+  return;
+}
+// Ray-marched implicit preview + mannequin. Optional: local module imports are
+// blocked on file://, in which case the coarse mesh preview is used instead.
+let PV = null;
+try { PV = await import('./preview.js'); } catch (e) { console.warn('Implicit preview unavailable:', e); }
 
 const $ = (id) => document.getElementById(id);
 const fmt = (v, d = 2) => (+v.toFixed(d)).toString();
@@ -176,8 +192,11 @@ $('simp').innerHTML = SIMP.map(([t, n]) => `<option value="${t}" ${t === S.simp 
 $('metal').innerHTML = METALS.map((m) => `<option value="${m[0]}">${m[1]}  (${m[2]} g/cm\u00b3)</option>`).join('');
 $('res').addEventListener('change', (e) => { S.res = +e.target.value; dropFinal(); updateExport(); });
 $('simp').addEventListener('change', (e) => { S.simp = +e.target.value; dropFinal(); updateExport(); });
-$('metal').addEventListener('change', (e) => { S.metal = e.target.value; matMesh.color.setHex(metal()[3]); styleMat(); updateStats(); });
-$('wire').addEventListener('change', (e) => { matMesh.wireframe = e.target.checked; });
+$('metal').addEventListener('change', (e) => { S.metal = e.target.value; matMesh.color.setHex(metal()[3]); styleMat(); updateStats(); if (iv && iv.object.visible) updateImplicit(params()); });
+$('wire').addEventListener('change', (e) => {
+  matMesh.wireframe = e.target.checked;
+  if (e.target.checked && iv) { iv.object.visible = false; if (meshObj) meshObj.visible = true; } // wireframe needs the mesh
+});
 radios('fmt', (v) => (S.fmt = v));
 radios('xu', (v) => (S.xu = v));
 
@@ -201,6 +220,27 @@ function styleMat() {
 }
 styleMat();
 let meshObj = null, lastBB = null;
+// implicit body (shown while editing) and the wearer mannequin
+const iv = PV ? PV.makeImplicitView() : null;
+if (iv) root.add(iv.object);
+const matBody = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, metalness: 0 });
+let manObj = null;
+function updateImplicit(P) {
+  if (!iv) return;
+  try {
+    const src = P.kind === 'custom' ? P.expr : TPMS[P.kind] || TPMS.gyroid;
+    const plastic = S.metal === 'resin' || S.metal === 'pla';
+    iv.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic);
+    iv.object.visible = true;
+    if (meshObj) meshObj.visible = false;
+  } catch (e) { iv.object.visible = false; if (meshObj) meshObj.visible = true; }
+}
+function updateMannequin(P) {
+  if (manObj) { root.remove(manObj); manObj.traverse((o) => o.geometry && o.geometry.dispose()); manObj = null; }
+  if (!PV || !$('man').checked) return;
+  manObj = PV.makeMannequin(P, matBody); root.add(manObj);
+}
+$('man').addEventListener('change', () => updateMannequin(params()));
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
   renderer.setSize(r.width, r.height, false);
@@ -225,6 +265,7 @@ function show(pos, idx) {
   g.computeVertexNormals(); g.computeBoundingBox();
   if (meshObj) { root.remove(meshObj); meshObj.geometry.dispose(); }
   meshObj = new THREE.Mesh(g, matMesh); root.add(meshObj);
+  meshObj.visible = !(iv && iv.object.visible);
   const b = g.boundingBox;
   lastBB = { lo: b.min.toArray(), hi: b.max.toArray() };
   $('dims').textContent = `${fmt(b.max.x - b.min.x, 1)} \u00d7 ${fmt(b.max.y - b.min.y, 1)} \u00d7 ${fmt(b.max.z - b.min.z, 1)} mm`;
@@ -291,6 +332,7 @@ function onMsg(m) {
   if (m.type === 'error') { $('err').textContent = m.message; $('err').hidden = false; }
   else if (m.type === 'mesh') {
     $('err').hidden = true;
+    if (job.final && iv) iv.object.visible = false; // processed mesh replaces the implicit view
     show(m.positions, m.indices);
     if (job.final && job.key === keyOf()) finalMesh = { key: job.key, positions: m.positions, indices: m.indices, volume: m.volume };
     $('status').innerHTML = `<b>${job.final ? 'Processed mesh' : 'Preview'}</b> \u00b7 voxel ${fmt(job.voxel, 3)} mm \u00b7 ${(m.indices.length / 3).toLocaleString()} triangles${m.islands ? ` \u00b7 ${m.islands} loose fragments removed` : ''}`;
@@ -307,6 +349,8 @@ function changed(fit = false) {
   dropFinal(); updateExport();
   clearTimeout(tChange);
   $('busy').hidden = false; $('busy').textContent = 'Updating\u2026';
+  const P0 = params();
+  updateImplicit(P0); updateMannequin(P0);
   tChange = setTimeout(() => {
     const P = params();
     submit({ type: 'mesh', params: P, voxel: previewVoxel(P), simplify: 0, final: false, fit, key: keyOf() });
@@ -368,3 +412,4 @@ $('download').addEventListener('click', () => {
 // ---------------- go ----------------
 buildFields();
 changed(true);
+})();

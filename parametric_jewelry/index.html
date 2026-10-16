@@ -76,8 +76,9 @@
         </div>
         <div class="checks">
           <label class="chk"><input autocomplete="off" type="checkbox" id="wire"><span class="box"></span><span>Wireframe</span></label>
+          <label class="chk"><input autocomplete="off" type="checkbox" id="man" checked><span class="box"></span><span>Show on body</span></label>
         </div>
-        <p class="hint-line" id="meshHint">The live preview uses a coarse grid. Process mesh builds the full resolution.</p>
+        <p class="hint-line" id="meshHint">While you edit, the preview ray-marches the implicit solid directly (no mesh). Process mesh builds the triangles at full resolution.</p>
         <button type="button" class="b go" id="process">Process mesh</button>
       </section>
 
@@ -143,6 +144,6 @@
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 } }
 </script>
-<script type="module" src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
