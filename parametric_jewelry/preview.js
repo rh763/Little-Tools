@@ -96,8 +96,10 @@ export function makeImplicitView() {
   for (const k of ['uNorm', 'uIso', 'uThick', 'uRim', 'uNU', 'uNV', 'uTwist', 'uRin', 'uT', 'uW', 'uRound', 'uTanT', 'uSpan', 'uCu', 'uCw', 'uD', 'uElong', 'uMetal']) U[k] = { value: 0 };
   Object.assign(U, { uInvModel: { value: new THREE.Matrix4() }, uModel: { value: new THREE.Matrix4() }, uProj: { value: new THREE.Matrix4() }, uLo: { value: new THREE.Vector3() }, uHi: { value: new THREE.Vector3() },
     uColor: { value: new THREE.Color() }, uCat: { value: 0 }, uMode: { value: 0 }, uN: { value: 32 }, uClosed: { value: true }, uTop: { value: new Array(33).fill(0) } });
-  const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), null);
-  box.frustumCulled = false;
+  // placeholder material until the first update() compiles the shader
+  // (a null material crashes three.js's render loop on `material.visible`)
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ visible: false }));
+  box.frustumCulled = false; box.visible = false;
   let glslKey = null;
   box.onBeforeRender = (renderer, scene, camera) => {
     U.uModel.value.copy(box.matrixWorld); U.uInvModel.value.copy(box.matrixWorld).invert();
