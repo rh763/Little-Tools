@@ -151,7 +151,58 @@ function bust(mat, cx, cy, cz) { // egg head + neck + shoulders, head centre at 
   g.add(sh);
   return g;
 }
+// ---------------- scanned reference bodies ----------------
+// Hand: "Hand and Forearm - Full.stl" (mm, fingers along +Z).
+// Head: "young_woman_age_20-25_bald_head.glb" by nektarios81 (Sketchfab), CC-BY-4.0.
+// Placements were fitted offline against the piece frame (mm, Z up, front +Y). The simple
+// primitive mannequin is shown until the file has loaded, and stays if loading fails.
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const REF = './reference model/';
+const HAND = 'Hand and Forearm - Full.stl', HEAD = 'young_woman_age_20-25_bald_head.glb';
+const refCache = {};
+function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
+  if (!refCache[name]) refCache[name] = new Promise((res, rej) => {
+    const url = encodeURI(REF + name);
+    if (name.endsWith('.stl')) new STLLoader().load(url, (geo) => res([geo]), undefined, rej);
+    else new GLTFLoader().load(url, (gl) => {
+      const out = []; gl.scene.updateMatrixWorld(true);
+      gl.scene.traverse((o) => { if (o.isMesh) { const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld); out.push(geo); } });
+      res(out);
+    }, undefined, rej);
+  });
+  return refCache[name];
+}
+// hand: piece = k * (p - c), c = ring-finger base / wrist centre, scaled so the finger/wrist fits rin.
+// head: raw (gx, gy, gz) -> piece (-gx, gz, gy) * k + t (face to +Y).
+function refPlacement(P) {
+  const m = new THREE.Matrix4();
+  if (P.cat === 'ring' || P.cat === 'bangle') {
+    const [c, r0] = P.cat === 'ring' ? [[-15.5, 4, 592], 10.4 / 0.96] : [[22.6, 2.6, 462], 27 / 0.92];
+    const k = P.rin / r0;
+    m.set(k, 0, 0, -k * c[0], 0, k, 0, -k * c[1], 0, 0, k, -k * c[2], 0, 0, 0, 1);
+    return [HAND, m];
+  }
+  let k, t;
+  if (P.cat === 'tiara') { const s = P.rin / 70; k = 259.2 * s; t = [0, -22.9 * s, -205.6 * s]; } // crown circle = rin
+  else { k = 220; t = [-0.324 * k, 0.045 * k, 1.78 - 0.215 * k]; } // left ear lobe at the hook
+  m.set(-k, 0, 0, t[0], 0, 0, k, t[1], 0, k, 0, t[2], 0, 0, 0, 1);
+  return [HEAD, m];
+}
 export function makeMannequin(P, mat) {
+  const g = makePrimitive(P, mat);
+  const [name, m] = refPlacement(P);
+  loadRef(name).then((geos) => {
+    for (const c of [...g.children]) { g.remove(c); c.traverse((o) => o.geometry && o.geometry.dispose()); }
+    for (const geo of geos) {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.matrixAutoUpdate = false; mesh.matrix.copy(m); mesh.userData.shared = true;
+      g.add(mesh);
+    }
+  }).catch((e) => console.warn('Reference body unavailable, using simple mannequin:', e));
+  return g;
+}
+function makePrimitive(P, mat) {
   const g = new THREE.Group();
   if (P.cat === 'ring') { // hand, ring finger along Z through the ring
     const rf = P.rin * 0.96;
