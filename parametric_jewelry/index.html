@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parametric TPMS Jewelry</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1 class="logo">tpms jewelry <small>generator</small></h1>
+    <div class="head-links">
+      <button type="button" class="help" id="helpBtn" aria-expanded="false">help</button>
+    </div>
+  </header>
+  <main>
+    <aside class="side" aria-label="Jewelry parameters">
+      <p class="intro">Design a ring, bangle, tiara or earring filled with a triply periodic minimal surface. Change a value and the preview updates. Process the mesh when you are happy, then download it for casting or printing.</p>
+
+      <section class="group">
+        <div class="tabline"><h2 class="tab">Piece</h2><button type="button" class="qi" data-help="piece">?</button></div>
+        <div class="checks" role="radiogroup" aria-label="Piece type">
+          <label class="chk"><input autocomplete="off" type="radio" name="cat" value="ring" checked><span class="box"></span><span>Ring</span></label>
+          <label class="chk"><input autocomplete="off" type="radio" name="cat" value="bangle"><span class="box"></span><span>Bangle</span></label>
+          <label class="chk"><input autocomplete="off" type="radio" name="cat" value="tiara"><span class="box"></span><span>Tiara</span></label>
+          <label class="chk"><input autocomplete="off" type="radio" name="cat" value="earring"><span class="box"></span><span>Earring</span></label>
+        </div>
+        <button type="button" class="b" id="resetCat">Reset this piece</button>
+      </section>
+
+      <section class="group">
+        <div class="tabline"><h2 class="tab">Size &amp; shape</h2></div>
+        <div id="geoFields" class="group"></div>
+      </section>
+
+      <section class="group">
+        <div class="tabline"><h2 class="tab">Pattern</h2><button type="button" class="qi" data-help="pattern">?</button></div>
+        <div class="row">
+          <div class="lbl"><label for="kind">Surface<button type="button" class="qi" data-help="kind">?</button></label></div>
+          <select autocomplete="off" id="kind">
+            <option value="gyroid">Gyroid</option>
+            <option value="diamond">Schwarz D (diamond)</option>
+            <option value="schwarzp">Schwarz P (primitive)</option>
+            <option value="neovius">Neovius</option>
+            <option value="iwp">Schoen I-WP</option>
+            <option value="lidinoid">Lidinoid</option>
+            <option value="fischerkoch">Fischer-Koch S</option>
+            <option value="custom">Custom formula</option>
+          </select>
+        </div>
+        <div class="row">
+          <div class="lbl"><label for="expr">Formula f(x, y, z) = 0<button type="button" class="qi" data-help="expr">?</button></label></div>
+          <textarea id="expr" rows="3" spellcheck="false" autocomplete="off"></textarea>
+          <p class="note" id="exprNote" hidden></p>
+        </div>
+        <div class="row">
+          <div class="lbl"><span>Solid type<button type="button" class="qi" data-help="mode">?</button></span></div>
+          <div class="checks" role="radiogroup" aria-label="Solid type">
+            <label class="chk"><input autocomplete="off" type="radio" name="mode" value="sheet" checked><span class="box"></span><span>Sheet</span></label>
+            <label class="chk"><input autocomplete="off" type="radio" name="mode" value="strut"><span class="box"></span><span>Network</span></label>
+          </div>
+        </div>
+        <div id="patFields" class="group"></div>
+      </section>
+
+      <section class="group">
+        <div class="tabline"><h2 class="tab">Mesh</h2><button type="button" class="qi" data-help="mesh">?</button></div>
+        <div class="row">
+          <div class="lbl"><label for="res">Mesh resolution<button type="button" class="qi" data-help="res">?</button></label><span class="hint">voxel size</span></div>
+          <select autocomplete="off" id="res"></select>
+        </div>
+        <div class="row">
+          <div class="lbl"><label for="simp">Simplify<button type="button" class="qi" data-help="simp">?</button></label><span class="hint">smaller file</span></div>
+          <select autocomplete="off" id="simp"></select>
+        </div>
+        <div class="checks">
+          <label class="chk"><input autocomplete="off" type="checkbox" id="wire"><span class="box"></span><span>Wireframe</span></label>
+        </div>
+        <p class="hint-line" id="meshHint">The live preview uses a coarse grid. Process mesh builds the full resolution.</p>
+        <button type="button" class="b go" id="process">Process mesh</button>
+      </section>
+
+      <section class="group">
+        <div class="tabline"><h2 class="tab">Export</h2><button type="button" class="qi" data-help="export">?</button></div>
+        <div class="row">
+          <div class="lbl"><label for="metal">Material<button type="button" class="qi" data-help="metal">?</button></label><span class="hint">for weight</span></div>
+          <select autocomplete="off" id="metal"></select>
+        </div>
+        <div class="trio">
+          <div class="row">
+            <div class="lbl"><span>Format</span></div>
+            <div class="checks" role="radiogroup" aria-label="File format">
+              <label class="chk"><input autocomplete="off" type="radio" name="fmt" value="stl" checked><span class="box"></span><span>STL</span></label>
+              <label class="chk"><input autocomplete="off" type="radio" name="fmt" value="obj"><span class="box"></span><span>OBJ</span></label>
+            </div>
+          </div>
+          <div class="row">
+            <div class="lbl"><span>File units</span></div>
+            <div class="checks" role="radiogroup" aria-label="File units">
+              <label class="chk"><input autocomplete="off" type="radio" name="xu" value="mm" checked><span class="box"></span><span>mm</span></label>
+              <label class="chk"><input autocomplete="off" type="radio" name="xu" value="in"><span class="box"></span><span>in</span></label>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="b" id="download" disabled>Download</button>
+        <p class="hint-line" id="dlHint">Process the mesh first.</p>
+        <dl class="stats" id="stats"></dl>
+      </section>
+    </aside>
+
+    <div class="view">
+      <canvas id="gl" tabindex="0" aria-label="3D preview. Drag to rotate, scroll or pinch to zoom, right-drag to pan."></canvas>
+      <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="vtop"><button type="button" class="vbtn" id="fit">Fit view</button></div>
+      <div class="busy" id="busy" hidden></div>
+      <div class="err" id="err" role="alert" hidden></div>
+      <div class="dims" id="dims"></div>
+      <div class="help-panel" id="help" hidden>
+        <h2>How it works</h2>
+        <p>Every piece is an implicit solid: a smooth outer shape (band, arc or ellipsoid) intersected with a triply periodic minimal surface (TPMS). The pattern is wrapped around the piece, so the cells follow the curve of the band instead of being cut from a straight block.</p>
+        <p><b>Sheet</b> thickens the surface itself into a thin wall. <b>Network</b> fills one side of the surface, giving a strut-like lattice.</p>
+        <p><b>Edge rails</b> add solid borders along the band edges (or a shell around the earring), which makes the piece much stronger and nicer to wear.</p>
+        <p>Choose a surface from the list or type your own formula in x, y, z. One period of 2&pi; in each direction is one cell.</p>
+        <p>The mesh is built with marching cubes and can be simplified. It is always closed and watertight. Weight is estimated from the mesh volume and the chosen material.</p>
+        <h2>Viewer</h2>
+        <p>Drag to rotate. Scroll or pinch to zoom. Right-drag or two-finger drag to pan.</p>
+      </div>
+    </div>
+  </main>
+  <footer class="contact">
+    <p class="contact-msg" id="contactMsg" hidden>Feel free to reach out to Lucius H @ <a href="mailto:luciush0617@gmail.com"><span>luciush0617@gmail.com</span></a> or <a href="mailto:rh763@cornell.edu"><span>rh763@cornell.edu</span></a></p>
+    <span class="contact-q">Questions?<button type="button" class="qi" id="contactBtn" aria-expanded="false" aria-controls="contactMsg" aria-label="Contact">?</button></span>
+  </footer>
+</div>
+
+<!-- worker.js also runs on the main thread as a fallback when Web Workers are unavailable -->
+<script src="worker.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
