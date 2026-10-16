@@ -185,8 +185,7 @@ function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
 // head: raw (gx, gy, gz) -> piece (-gx, gz, gy) * k + t (face to +Y).
 // ring finger in the scan is tilted ~38 deg from Z. Axis + base of the finger from a circle fit
 // of the scan; finger radius there is ~8.8 mm (refit on circle centres, z = -5..25 mm past the base)
-const RING_C = new THREE.Vector3(-15.5, 4.2, 585), RING_A = (() => { const tilt = -35 * Math.PI / 180, az = 15 * Math.PI / 180;
-  return new THREE.Vector3(Math.sin(tilt) * Math.cos(az), Math.sin(tilt) * Math.sin(az), Math.cos(tilt)); })();
+const RING_C = new THREE.Vector3(-7.74, 3.18, 619.46), RING_A = new THREE.Vector3(0.5959, 0.0626, 0.8006).normalize();
 // On the body the arm stands upright (same pose as for the bangle) and the ring is tilted onto
 // the finger instead: app.js applies this rotation to the piece + mannequin when "Show on body" is on.
 export function wearRotation(P) {
@@ -196,7 +195,7 @@ function refPlacement(P) {
   const m = new THREE.Matrix4();
   if (P.cat === 'ring') { // rotate the finger axis onto Z; wearRotation() turns the whole set back upright
     const c = RING_C, a = RING_A;
-    const k = P.rin / 9.9, q = new THREE.Quaternion().setFromUnitVectors(a, new THREE.Vector3(0, 0, 1));
+    const k = P.rin / 8.8, q = new THREE.Quaternion().setFromUnitVectors(a, new THREE.Vector3(0, 0, 1));
     m.compose(new THREE.Vector3(), q, new THREE.Vector3(k, k, k)).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
     return [HAND, m];
   }

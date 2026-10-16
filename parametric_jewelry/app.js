@@ -29,7 +29,7 @@ const DEF = {
   ring:    { rin: 8.6, T: 1.8, W: 6, round: 0.5, tilt: 0, rise: 0, spread: 0.18, nU: 24, nV: 2, nW: 1, twist: 0, thick: 0.45, rim: 0.4 },
   bangle:  { rin: 30, T: 3, W: 14, round: 0.5, tilt: 0, rise: 0, spread: 0.18, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
   tiara:   { rin: 70, T: 2, W: 10, span: 150, round: 0.5, tilt: 10, rise: 25, spread: 0.16, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
-  earring: { D: 16, elong: 1.3, nU: 4, thick: 0.45, rim: 0 },
+  earring: { D: 16, elong: 1.3, nU: 4, thick: 0.45, rim: 0, earX: 0, earY: 0, earZ: 0 },
   choker:  { rin: 52, gap: 12, T: 2, W: 16, round: 0.5, tilt: 0, rise: 6, spread: 0.2, nU: 60, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
 };
 const isOpen = (c) => c === 'tiara' || c === 'choker';
@@ -67,7 +67,7 @@ function slider(parent, o) {
     if (!isFinite(v)) return;
     v = Math.min(Math.max(v, o.min), o.max);
     if (o.int) v = Math.round(v);
-    o.set(v); c.refresh(); changed();
+    o.set(v); c.refresh(); (o.onchange || changed)();
   };
   r.addEventListener('input', () => commit(r.value));
   n.addEventListener('change', () => commit(n.value));
@@ -85,6 +85,11 @@ function buildFields() {
   if (c === 'earring') {
     slider(g, { id: 'D', label: 'Width', help: 'D', unit: 'mm', min: 6, max: 40, step: 0.5, ...P_('D') });
     slider(g, { id: 'elong', label: 'Drop length', help: 'elong', hint: () => 'x half-width', min: 0.5, max: 3, step: 0.05, ...P_('elong') });
+    // where the pair hangs on the head (preview only: the exported mesh is unchanged)
+    const wearUpd = () => updateMannequin(params());
+    slider(g, { id: 'earX', label: 'On ear: out from head', help: 'earPos', unit: 'mm', min: -15, max: 15, step: 0.5, onchange: wearUpd, ...P_('earX') });
+    slider(g, { id: 'earY', label: 'On ear: forward / back', help: 'earPos', unit: 'mm', min: -20, max: 20, step: 0.5, onchange: wearUpd, ...P_('earY') });
+    slider(g, { id: 'earZ', label: 'On ear: up / down', help: 'earPos', unit: 'mm', min: -20, max: 20, step: 0.5, onchange: wearUpd, ...P_('earZ') });
   } else {
     if (c === 'tiara') {
       slider(g, { id: 'rin', label: 'Head radius', help: 'rinT', unit: 'mm', min: 50, max: 100, step: 0.5, ...P_('rin') });
@@ -140,6 +145,7 @@ const HELP = {
   round: 'Rounds the corners of the band cross-section. 0 gives a square edge, 1 a fully round edge.',
   tilt: 'Leans the band cross-section, so the band becomes a cone. Useful for tiaras so they sit on the head.',
   D: 'Width of the earring drop.',
+  earPos: 'Moves the earring pair on the head in the preview (both ears move symmetrically). This only changes how it is shown on the body, not the exported mesh.',
   elong: 'Length of the drop compared with its half width. 1 gives a sphere, larger values a longer teardrop-like ellipsoid. A small loop for the ear hook sits on top.',
   pattern: 'The lattice that fills the piece. It is a triply periodic minimal surface (TPMS), wrapped so the cells follow the curve of the band.',
   kind: 'Which surface to use. Gyroid and Schwarz D are smooth and very strong. Schwarz P gives round holes. Neovius, I-WP, Lidinoid and Fischer-Koch give more intricate patterns. Pick Custom to type your own.',
@@ -263,6 +269,11 @@ function updateMannequin(P) {
   root.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2).multiply(wear);
   if (!PV || !$('man').checked) return;
   manObj = PV.makeMannequin(P, matBody); root.add(manObj);
+  if (P.cat === 'earring') { // ear offsets: move the head the other way, so the piece (and its export) stay put
+    const e = cur(), dx = e.earX || 0;
+    manObj.position.set(-dx, -(e.earY || 0), -(e.earZ || 0));
+    pair.position.x = PV.EAR_PAIR_X - 2 * dx; // keep the pair mirrored about the head's mid-plane
+  }
 }
 $('man').addEventListener('change', () => updateMannequin(params()));
 function resize() {
