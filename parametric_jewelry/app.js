@@ -258,6 +258,9 @@ function updateImplicit(P) {
 }
 function updateMannequin(P) {
   if (manObj) { root.remove(manObj); manObj.traverse((o) => o.geometry && !o.userData.shared && o.geometry.dispose()); manObj = null; }
+  // on the body the ring is tilted onto the finger so the arm stands upright (like the bangle)
+  const wear = PV && PV.wearRotation && $('man').checked ? PV.wearRotation(P) : new THREE.Quaternion();
+  root.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2).multiply(wear);
   if (!PV || !$('man').checked) return;
   manObj = PV.makeMannequin(P, matBody); root.add(manObj);
 }
@@ -273,7 +276,7 @@ function fitView() {
   const bb = lastBB || makeField(params()).bb;
   const c = bb.lo.map((v, i) => (v + bb.hi[i]) / 2), R = Math.hypot(...bb.lo.map((v, i) => bb.hi[i] - v)) / 2;
   const dist = R / Math.sin((camera.fov * Math.PI) / 360) * 1.05;
-  const tgt = new THREE.Vector3(c[0], c[2], -c[1]); // root rotation maps (x,y,z) -> (x,z,-y)
+  const tgt = new THREE.Vector3(c[0], c[1], c[2]).applyQuaternion(root.quaternion); // piece frame -> world
   orbit.target.copy(tgt);
   camera.position.copy(tgt).add(new THREE.Vector3(0.45, 0.5, 0.75).normalize().multiplyScalar(dist));
   camera.near = dist / 100; camera.far = dist * 20; camera.updateProjectionMatrix();
