@@ -14,8 +14,8 @@ Gyroid, Schwarz D, Schwarz P, Neovius, Schoen I-WP, Lidinoid, Fischer-Koch S, or
 - Cells around / across / through, twist, wall thickness, edge rails (or an outer shell on the earring)
 
 ## Mesh & export
-- Implicit field Ã¢ÂÂ marching cubes (watertight) Ã¢ÂÂ removal of loose fragments Ã¢ÂÂ QEM simplification
-- Adjustable voxel resolution (0.05Ã¢ÂÂ0.3 mm) and simplification level
+- Implicit field -> marching cubes (watertight) -> removal of loose fragments -> QEM simplification
+- Adjustable voxel resolution (0.05-0.3 mm) and simplification level
 - Binary STL or OBJ, in mm or inches
 - Volume and estimated weight for common casting metals and print resins
 
