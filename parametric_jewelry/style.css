@@ -192,4 +192,6 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .side { overflow: visible; padding-right: 0; }
   .logo { font-size: 18px; }
 }
+/* "Show on body" toggle lives in the preview, right side under Fit view */
+.vright { position: absolute; top: 44px; right: 8px; padding: 6px 8px; background: rgba(255, 255, 255, 0.82); border: 1px solid var(--ink); }
 @media (prefers-reduced-motion: reduce) { .progress span { transition: none; } }

@@ -77,7 +77,6 @@
         </div>
         <div class="checks">
           <label class="chk"><input autocomplete="off" type="checkbox" id="wire"><span class="box"></span><span>Wireframe</span></label>
-          <label class="chk"><input autocomplete="off" type="checkbox" id="man" checked><span class="box"></span><span>Show on body</span></label>
         </div>
         <p class="hint-line" id="meshHint">While you edit, the preview ray-marches the implicit solid directly (no mesh). Process mesh builds the triangles at full resolution.</p>
         <button type="button" class="b go" id="process">Process mesh</button>
@@ -116,6 +115,7 @@
       <div class="progress" aria-hidden="true"><span id="bar"></span></div>
       <div class="status" id="status" aria-live="polite"></div>
       <div class="vtop"><button type="button" class="vbtn" id="fit">Fit view</button></div>
+      <div class="vright"><label class="chk vchk"><input autocomplete="off" type="checkbox" id="man" checked><span class="box"></span><span>Show on body</span></label></div>
       <div class="busy" id="busy" hidden></div>
       <div class="err" id="err" role="alert" hidden></div>
       <div class="dims" id="dims"></div>
