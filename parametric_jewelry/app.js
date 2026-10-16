@@ -35,7 +35,7 @@ const DEF = {
 const isOpen = (c) => c === 'tiara' || c === 'choker';
 const PAT = { kind: 'gyroid', expr: TPMS.gyroid, mode: 'sheet', iso: 0 };
 const fresh = (c) => ({ ...PAT, ...DEF[c] });
-const S = { cat: 'ring', byCat: {}, res: 0.1, simp: 0.01, metal: 'ag925', fmt: 'stl', xu: 'mm', wire: false };
+const S = { cat: 'ring', finger: 'ring', byCat: {}, res: 0.1, simp: 0.01, metal: 'ag925', fmt: 'stl', xu: 'mm', wire: false };
 for (const c of Object.keys(DEF)) S.byCat[c] = fresh(c);
 const cur = () => S.byCat[S.cat];
 
@@ -80,16 +80,17 @@ const P_ = (k, scale = 1) => ({ get: () => cur()[k] * scale, set: (v) => (cur()[
 function buildFields() {
   controls = [];
   const g = $('geoFields'), p = $('patFields');
-  g.innerHTML = ''; p.innerHTML = '';
+  g.innerHTML = ''; p.innerHTML = ''; $('viewFields').innerHTML = '';
   const c = S.cat;
+  $('viewFields').hidden = c !== 'earring'; $('fingerPick').hidden = c !== 'ring';
   if (c === 'earring') {
     slider(g, { id: 'D', label: 'Width', help: 'D', unit: 'mm', min: 6, max: 40, step: 0.5, ...P_('D') });
     slider(g, { id: 'elong', label: 'Drop length', help: 'elong', hint: () => 'x half-width', min: 0.5, max: 3, step: 0.05, ...P_('elong') });
-    // where the pair hangs on the head (preview only: the exported mesh is unchanged)
-    const wearUpd = () => updateMannequin(params());
-    slider(g, { id: 'earX', label: 'On ear: out from head', help: 'earPos', unit: 'mm', min: -15, max: 15, step: 0.5, onchange: wearUpd, ...P_('earX') });
-    slider(g, { id: 'earY', label: 'On ear: forward / back', help: 'earPos', unit: 'mm', min: -20, max: 20, step: 0.5, onchange: wearUpd, ...P_('earY') });
-    slider(g, { id: 'earZ', label: 'On ear: up / down', help: 'earPos', unit: 'mm', min: -20, max: 20, step: 0.5, onchange: wearUpd, ...P_('earZ') });
+    // where the pair hangs on the head (preview only: the exported mesh is unchanged) -> viewport panel
+    const wearUpd = () => updateMannequin(params()), v = $('viewFields');
+    slider(v, { id: 'earX', label: 'On ear: out from head', help: 'earPos', unit: 'mm', min: -15, max: 15, step: 0.5, onchange: wearUpd, ...P_('earX') });
+    slider(v, { id: 'earY', label: 'On ear: forward / back', help: 'earPos', unit: 'mm', min: -20, max: 20, step: 0.5, onchange: wearUpd, ...P_('earY') });
+    slider(v, { id: 'earZ', label: 'On ear: up / down', help: 'earPos', unit: 'mm', min: -20, max: 20, step: 0.5, onchange: wearUpd, ...P_('earZ') });
   } else {
     if (c === 'tiara') {
       slider(g, { id: 'rin', label: 'Head radius', help: 'rinT', unit: 'mm', min: 50, max: 100, step: 0.5, ...P_('rin') });
@@ -262,7 +263,8 @@ function updateImplicit(P) {
     if (meshObj) meshObj.visible = false;
   } catch (e) { iv.object.visible = false; if (meshObj) meshObj.visible = true; }
 }
-function updateMannequin(P) {
+function updateMannequin(P0) {
+  const P = { ...P0, finger: S.finger }; // which finger is preview-only, so it stays out of the mesh key
   if (manObj) { root.remove(manObj); manObj.traverse((o) => o.geometry && !o.userData.shared && o.geometry.dispose()); manObj = null; }
   // on the body the ring is tilted onto the finger so the arm stands upright (like the bangle)
   const wear = PV && PV.wearRotation && $('man').checked ? PV.wearRotation(P) : new THREE.Quaternion();
@@ -276,6 +278,18 @@ function updateMannequin(P) {
   }
 }
 $('man').addEventListener('change', () => updateMannequin(params()));
+// hand diagram: click a finger to move the ring there (only the mannequin changes, the camera stays put)
+const fingerEls = document.querySelectorAll('#fingerPick [data-finger]');
+const pickFinger = (el) => {
+  S.finger = el.dataset.finger;
+  fingerEls.forEach((f) => f.classList.toggle('on', f === el));
+  $('fingerName').textContent = el.getAttribute('aria-label');
+  updateMannequin(params());
+};
+fingerEls.forEach((el) => {
+  el.addEventListener('click', () => pickFinger(el));
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickFinger(el); } });
+});
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
   renderer.setSize(r.width, r.height, false);
