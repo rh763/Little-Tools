@@ -5,8 +5,9 @@ An interactive, browser-only tool for designing jewelry filled with triply perio
 ## Pieces
 - **Ring**: inner diameter (US size shown), band thickness and width, front rise, edge rounding, tilt
 - **Bangle**: same controls, sized for the wrist
-- **Tiara**: an open arc with a head radius, arc span and peak height
-- **Earring**: an ellipsoid drop with a small ear-hook loop
+- **Tiara**: an open arc with a head radius, arc span and a scalloped peak outline (tall centre, smaller peaks to the sides)
+- **Choker**: a collar band sized by neck circumference, with a back opening for a clasp and an optional front rise. "Show on body" fits it to the neck of the head scan
+- **Earring**: an ellipsoid drop with a small ear-hook loop. Earrings are a pair: "Show on body" hangs a mirrored copy from the other ear, and the download contains both (left + mirrored right, side by side)
 
 ## Pattern
 Gyroid, Schwarz D, Schwarz P, Neovius, Schoen I-WP, Lidinoid, Fischer-Koch S, or a custom formula `f(x, y, z) = 0`. The formula is checked against a whitelist before it runs. The pattern is wrapped around the band, so cells follow the curve and closed bands join seamlessly.

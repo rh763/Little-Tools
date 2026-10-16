@@ -30,7 +30,9 @@ const DEF = {
   bangle:  { rin: 30, T: 3, W: 14, round: 0.5, tilt: 0, rise: 0, spread: 0.18, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
   tiara:   { rin: 70, T: 2, W: 10, span: 150, round: 0.5, tilt: 10, rise: 25, spread: 0.16, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
   earring: { D: 16, elong: 1.3, nU: 4, thick: 0.45, rim: 0 },
+  choker:  { rin: 52, gap: 12, T: 2, W: 16, round: 0.5, tilt: 0, rise: 6, spread: 0.2, nU: 60, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
 };
+const isOpen = (c) => c === 'tiara' || c === 'choker';
 const PAT = { kind: 'gyroid', expr: TPMS.gyroid, mode: 'sheet', iso: 0 };
 const fresh = (c) => ({ ...PAT, ...DEF[c] });
 const S = { cat: 'ring', byCat: {}, res: 0.1, simp: 0.01, metal: 'ag925', fmt: 'stl', xu: 'mm', wire: false };
@@ -87,6 +89,10 @@ function buildFields() {
     if (c === 'tiara') {
       slider(g, { id: 'rin', label: 'Head radius', help: 'rinT', unit: 'mm', min: 50, max: 100, step: 0.5, ...P_('rin') });
       slider(g, { id: 'span', label: 'Arc span', help: 'span', unit: 'deg', min: 60, max: 240, step: 1, ...P_('span') });
+    } else if (c === 'choker') {
+      slider(g, { id: 'rin', label: 'Neck circumference', help: 'rinC', unit: 'mm', min: 260, max: 440, step: 1,
+        hint: (v) => `inner \u00d8 ${fmt(v / Math.PI, 1)} mm`, ...P_('rin', 2 * Math.PI) });
+      slider(g, { id: 'gap', label: 'Back opening', help: 'gap', hint: () => '0 = closed', unit: 'mm', min: 0, max: 60, step: 0.5, ...P_('gap') });
     } else {
       slider(g, { id: 'rin', label: 'Inner diameter', help: c === 'ring' ? 'rinR' : 'rinB', unit: 'mm', min: c === 'ring' ? 12 : 45, max: c === 'ring' ? 26 : 80, step: 0.1,
         hint: (v) => (c === 'ring' ? `US size ${fmt(usSize(v), 1)}` : ''), ...P_('rin', 2) });
@@ -102,7 +108,7 @@ function buildFields() {
   if (c !== 'earring') {
     slider(p, { id: 'nV', label: 'Cells across width', help: 'nV', int: true, min: 1, max: 12, step: 1, ...P_('nV') });
     slider(p, { id: 'nW', label: 'Cells through thickness', help: 'nW', int: true, min: 1, max: 4, step: 1, ...P_('nW') });
-    slider(p, { id: 'twist', label: 'Twist', help: 'twist', int: c !== 'tiara', min: -6, max: 6, step: c === 'tiara' ? 0.1 : 1, unit: 'cells', ...P_('twist') });
+    slider(p, { id: 'twist', label: 'Twist', help: 'twist', int: !isOpen(c), min: -6, max: 6, step: isOpen(c) ? 0.1 : 1, unit: 'cells', ...P_('twist') });
   }
   const sheetRow = slider(p, { id: 'thick', label: 'Wall thickness', help: 'thick', unit: 'mm', min: 0.2, max: 3, step: 0.01, ...P_('thick') });
   const isoRow = slider(p, { id: 'iso', label: 'Network bias', help: 'iso', hint: () => '- thinner, + thicker', min: -1.2, max: 1.2, step: 0.01, ...P_('iso') });
@@ -125,6 +131,8 @@ const HELP = {
   rinB: 'Inner diameter of the bangle. Most adult hands need 60 to 70 mm to slide a closed bangle over the knuckles.',
   rinT: 'Radius of the circle the tiara follows, at the inside of the band. An adult head is roughly 70 to 80 mm in radius above the ears.',
   span: 'How far the tiara reaches around the head, in degrees. 180 covers the front half.',
+  rinC: 'Inner circumference of the choker, measured where it sits on the neck. Adult necks are usually about 300 to 380 mm; add 10 to 20 mm for a comfortable fit.',
+  gap: 'Opening at the back of the choker, measured along the band, for a clasp or to flex it on. 0 makes a closed collar (only for flexible prints).',
   T: 'Thickness of the band from inside to outside. The pattern fills this whole thickness.',
   W: 'Height of the band, measured along the finger, wrist or head.',
   rise: 'Makes the band taller at the front (or at the centre of a tiara), like a crown. Negative values make it lower there instead.',
@@ -225,12 +233,25 @@ const iv = PV ? PV.makeImplicitView() : null;
 if (iv) root.add(iv.object);
 const matBody = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, metalness: 0 });
 let manObj = null;
+// earring pair: on the body a mirrored copy hangs from the other ear
+const pair = new THREE.Group(); pair.scale.x = -1; pair.position.x = PV ? PV.EAR_PAIR_X : 0; pair.visible = false; root.add(pair);
+const ivR = PV ? PV.makeImplicitView() : null;
+if (ivR) pair.add(ivR.object);
+const meshR = new THREE.Mesh(new THREE.BufferGeometry(), matMesh); pair.add(meshR);
+function syncPair() { // called every frame: copy the left piece's state to the mirrored one
+  pair.visible = S.cat === 'earring' && !!PV && $('man').checked;
+  if (!pair.visible) return;
+  if (ivR) ivR.object.visible = !!(iv && iv.object.visible);
+  meshR.visible = !!(meshObj && meshObj.visible);
+  if (meshObj && meshR.geometry !== meshObj.geometry) meshR.geometry = meshObj.geometry;
+}
 function updateImplicit(P) {
   if (!iv) return;
   try {
     const src = P.kind === 'custom' ? P.expr : TPMS[P.kind] || TPMS.gyroid;
     const plastic = S.metal === 'resin' || S.metal === 'pla';
     iv.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic);
+    if (ivR && P.cat === 'earring') ivR.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic);
     iv.object.visible = true;
     if (meshObj) meshObj.visible = false;
   } catch (e) { iv.object.visible = false; if (meshObj) meshObj.visible = true; }
@@ -247,7 +268,7 @@ function resize() {
   camera.aspect = r.width / Math.max(r.height, 1); camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(canvas.parentElement); resize();
-(function loop() { orbit.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+(function loop() { orbit.update(); syncPair(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
 function fitView() {
   const bb = lastBB || makeField(params()).bb;
   const c = bb.lo.map((v, i) => (v + bb.hi[i]) / 2), R = Math.hypot(...bb.lo.map((v, i) => bb.hi[i] - v)) / 2;
@@ -276,11 +297,16 @@ function params() {
   const c = S.cat, p = cur();
   const P = { cat: c, kind: p.kind, expr: p.expr, mode: p.mode, thick: p.thick, iso: p.iso, rim: p.rim, nU: p.nU, nV: p.nV || 1, nW: p.nW || 1, twist: p.twist || 0 };
   if (c === 'earring') return Object.assign(P, { D: p.D, elong: p.elong });
-  Object.assign(P, { rin: p.rin, T: p.T, W: p.W, round: p.round, tilt: p.tilt, span: p.span || 360, top: [], bot: [] });
-  const closed = c !== 'tiara', N = closed ? 32 : 33;
+  // choker: open arc centred at the front, the back opening (mm along the band) sets the span
+  const span = c === 'choker' ? Math.max(180, 360 * (1 - p.gap / (2 * Math.PI * (p.rin + p.T / 2)))) : p.span || 360;
+  Object.assign(P, { rin: p.rin, T: p.T, W: p.W, round: p.round, tilt: p.tilt, span, top: [], bot: [] });
+  const closed = !isOpen(c), N = closed ? 32 : 33;
   for (let i = 0; i < N; i++) {
     const s = closed ? i / N : i / (N - 1);
-    P.top.push(p.rise * Math.exp(-(((s - 0.5) / p.spread) ** 2))); P.bot.push(0);
+    const g = Math.exp(-(((s - 0.5) / p.spread) ** 2));
+    // tiara: tall centre peak with smaller scalloped peaks stepping down to the sides
+    const sc = c === 'tiara' ? 0.72 + 0.28 * Math.cos(2 * Math.PI * 6 * (s - 0.5)) : 1;
+    P.top.push(p.rise * g * sc); P.bot.push(0);
   }
   return P;
 }
@@ -368,13 +394,27 @@ function updateStats() {
   if (!vol) { $('stats').innerHTML = ''; return; }
   const m = metal(), g = (vol / 1000) * m[2];
   const rows = [[finalMesh ? 'Volume' : 'Volume (preview)', `${fmt(vol / 1000, 3)} cm\u00b3`], ['Est. weight', `${fmt(g, 2)} g`]];
+  if (S.cat === 'earring') rows.push(['Pair weight', `${fmt(2 * g, 2)} g`]);
   if (finalMesh) rows.push(['Triangles', (finalMesh.indices.length / 3).toLocaleString()]);
   $('stats').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
 }
 function updateExport() {
   const ok = !!finalMesh && finalMesh.key === keyOf();
   $('download').disabled = !ok;
-  $('dlHint').textContent = ok ? `Ready: ${S.cat} at ${S.res} mm.` : 'Process the mesh first.';
+  $('dlHint').textContent = ok ? `Ready: ${S.cat === 'earring' ? 'earring pair (left + mirrored right)' : S.cat} at ${S.res} mm.` : 'Process the mesh first.';
+}
+function earringPair(pos, idx) { // left piece + mirrored right piece, side by side 4 mm apart
+  const n = pos.length, nv = n / 3, P2 = new Float32Array(2 * n), I2 = new Uint32Array(2 * idx.length);
+  let hx = -Infinity;
+  for (let i = 0; i < n; i += 3) hx = Math.max(hx, pos[i]);
+  const m2 = 2 * (hx + 2);
+  P2.set(pos); I2.set(idx);
+  for (let i = 0; i < n; i += 3) { P2[n + i] = m2 - pos[i]; P2[n + i + 1] = pos[i + 1]; P2[n + i + 2] = pos[i + 2]; }
+  for (let t = 0; t < idx.length; t += 3) { // mirroring flips orientation, so swap two corners
+    const o = idx.length + t;
+    I2[o] = idx[t] + nv; I2[o + 1] = idx[t + 2] + nv; I2[o + 2] = idx[t + 1] + nv;
+  }
+  return { pos: P2, idx: I2 };
 }
 function toSTL(pos, idx, sc) {
   const n = idx.length / 3, buf = new ArrayBuffer(84 + 50 * n), dv = new DataView(buf);
@@ -401,10 +441,12 @@ function toOBJ(pos, idx, sc) {
 $('download').addEventListener('click', () => {
   if (!finalMesh) return;
   const sc = S.xu === 'in' ? 1 / 25.4 : 1;
-  const blob = S.fmt === 'stl' ? toSTL(finalMesh.positions, finalMesh.indices, sc) : toOBJ(finalMesh.positions, finalMesh.indices, sc);
+  let pos = finalMesh.positions, idx = finalMesh.indices;
+  if (S.cat === 'earring') ({ pos, idx } = earringPair(pos, idx));
+  const blob = S.fmt === 'stl' ? toSTL(pos, idx, sc) : toOBJ(pos, idx, sc);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `tpms_${S.cat}_${cur().kind}_${S.res}mm.${S.fmt}`;
+  a.download = `tpms_${S.cat}${S.cat === 'earring' ? '_pair' : ''}_${cur().kind}_${S.res}mm.${S.fmt}`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 });

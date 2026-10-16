@@ -35,7 +35,12 @@ float field(vec3 p) {
     float s = max(d, tpd(p.x / cell, p.y / cell, p.z / cell, cell));
     if (uRim > 0.0) s = min(s, max(d, -(d + uRim)));
     float lp = length(vec2(length(vec2(p.y, p.z - zl)) - Rl, p.x)) - wr * 0.5;
-    return min(s, lp);
+    float zs = zl + Rl - 0.2, z0 = zl + Rl + 9.0, Rh = 3.0; // ear hook, same as worker.js
+    float d1 = length(vec2(p.y, p.z - clamp(p.z, zs, z0)));
+    float d3 = length(vec2(p.y + 2.0 * Rh, p.z - clamp(p.z, z0 - 6.0, z0)));
+    float da = p.z > z0 ? abs(length(vec2(p.y + Rh, p.z - z0)) - Rh) : 1e3;
+    float hk = length(vec2(min(min(d1, d3), da), p.x)) - 0.4;
+    return min(min(s, lp), hk);
   }
   float r = length(p.xy), Rmid = uRin + uT * 0.5;
   float th = atan(p.y, p.x) - PI * 0.5;
@@ -118,13 +123,13 @@ export function makeImplicitView() {
     g.translate((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
     box.geometry.dispose(); box.geometry = g;
     U.uLo.value.set(...lo); U.uHi.value.set(...hi);
-    U.uCat.value = { ring: 0, bangle: 1, tiara: 2, earring: 3 }[P.cat];
+    U.uCat.value = { ring: 0, bangle: 1, tiara: 2, earring: 3, choker: 2 }[P.cat];
     U.uMode.value = P.mode === 'strut' ? 1 : 0;
     U.uNorm.value = norm; U.uIso.value = P.iso; U.uThick.value = P.thick; U.uRim.value = P.rim;
     U.uNU.value = P.nU; U.uNV.value = P.nV; U.uTwist.value = P.twist;
     U.uColor.value.setHex(colorHex); U.uMetal.value = metallic ? 1 : 0;
     if (P.cat === 'earring') { U.uD.value = P.D; U.uElong.value = P.elong; return; }
-    const closed = P.cat !== 'tiara', span = closed ? 2 * Math.PI : P.span * Math.PI / 180, Rmid = P.rin + P.T / 2;
+    const closed = P.cat !== 'tiara' && P.cat !== 'choker', span = closed ? 2 * Math.PI : P.span * Math.PI / 180, Rmid = P.rin + P.T / 2;
     U.uClosed.value = closed; U.uSpan.value = span; U.uRin.value = P.rin; U.uT.value = P.T; U.uW.value = P.W;
     U.uRound.value = P.round; U.uTanT.value = Math.tan(P.tilt * Math.PI / 180);
     U.uCu.value = span * Rmid / P.nU; U.uCw.value = (span * Rmid / P.nU + P.W / P.nV) / 2 / (P.nW || 1);
@@ -161,6 +166,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const REF = './reference model/';
 const HAND = 'Hand and Forearm - Full.stl', HEAD = 'young_woman_age_20-25_bald_head.glb';
 const refCache = {};
+// Earrings come in pairs: the head's mid-plane is at x = -71.3 in the earring frame, so the
+// mirrored copy for the right ear is the piece reflected in x and moved to x = 2 * -71.3.
+export const EAR_PAIR_X = -142.6;
 function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
   if (!refCache[name]) refCache[name] = new Promise((res, rej) => {
     const url = encodeURI(REF + name);
@@ -177,15 +185,31 @@ function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
 // head: raw (gx, gy, gz) -> piece (-gx, gz, gy) * k + t (face to +Y).
 function refPlacement(P) {
   const m = new THREE.Matrix4();
-  if (P.cat === 'ring' || P.cat === 'bangle') {
-    const [c, r0] = P.cat === 'ring' ? [[-15.5, 4, 592], 10.4 / 0.96] : [[22.6, 2.6, 462], 27 / 0.92];
+  if (P.cat === 'ring') { // ring finger in the scan is tilted ~38 deg from Z: rotate its axis onto Z
+    // axis + base of the finger from a circle fit of the scan; finger radius there is ~8.8 mm
+    const c = new THREE.Vector3(-7.5, 2.0, 619.4), a = new THREE.Vector3(0.6, 0.118, 0.791).normalize();
+    const k = P.rin / 8.8, q = new THREE.Quaternion().setFromUnitVectors(a, new THREE.Vector3(0, 0, 1));
+    m.compose(new THREE.Vector3(), q, new THREE.Vector3(k, k, k)).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+    return [HAND, m];
+  }
+  if (P.cat === 'bangle') {
+    const c = [22.6, 2.6, 462], r0 = 27 / 0.92;
     const k = P.rin / r0;
     m.set(k, 0, 0, -k * c[0], 0, k, 0, -k * c[1], 0, 0, k, -k * c[2], 0, 0, 0, 1);
     return [HAND, m];
   }
   let k, t;
+  if (P.cat === 'choker') { // neck axis from circle fits of the scan: leans ~17.5 deg forward
+    // raw centre (gx, gy, gz) = (0, -0.30, -0.204); neck radius there is 0.18 mean / 0.20 max raw units,
+    // scaled on the max so the band clears the throat
+    const k = P.rin / 0.2, th = 0.306;
+    const m0 = new THREE.Matrix4().set(-1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1); // raw -> (-gx, gz, gy)
+    m.makeScale(k, k, k).multiply(new THREE.Matrix4().makeRotationX(th))
+      .multiply(new THREE.Matrix4().makeTranslation(0, 0.204, 0.30)).multiply(m0);
+    return [HEAD, m];
+  }
   if (P.cat === 'tiara') { const s = P.rin / 70; k = 259.2 * s; t = [0, -22.9 * s, -205.6 * s]; } // crown circle = rin
-  else { k = 220; t = [-0.324 * k, 0.045 * k, 1.78 - 0.215 * k]; } // left ear lobe at the hook
+  else { k = 220; t = [-0.324 * k, 0.045 * k - 3, 1.78 - 0.215 * k + 8.6]; } // left ear lobe pierced by the top of the hook
   m.set(-k, 0, 0, t[0], 0, 0, k, t[1], 0, k, 0, t[2], 0, 0, 0, 1);
   return [HEAD, m];
 }
@@ -218,6 +242,8 @@ function makePrimitive(P, mat) {
     g.add(ell(mat, rw * 1.25, rw * 0.6, 60, 0, 0, 55));
   } else if (P.cat === 'tiara') {
     g.add(bust(mat, 0, -20, -40));
+  } else if (P.cat === 'choker') { // neck through the choker
+    g.add(bust(mat, 0, 8, 145));
   } else { // earring: lobe at the hook, head to the -X side
     const zl = 1.6 + 0.18;
     g.add(ell(mat, 3.5, 14, 30, -1, -2, zl + 24));
