@@ -161,6 +161,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const REF = './reference model/';
 const HAND = 'Hand and Forearm - Full.stl', HEAD = 'young_woman_age_20-25_bald_head.glb';
 const refCache = {};
+// Earrings come in pairs: the head's mid-plane is at x = -71.3 in the earring frame, so the
+// mirrored copy for the right ear is the piece reflected in x and moved to x = 2 * -71.3.
+export const EAR_PAIR_X = -142.6;
 function loadRef(name) { // -> Promise<BufferGeometry[]>, loaded once and shared
   if (!refCache[name]) refCache[name] = new Promise((res, rej) => {
     const url = encodeURI(REF + name);
