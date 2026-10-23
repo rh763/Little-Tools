@@ -372,6 +372,68 @@ function interp(A, s, closed) {
   return 0.5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f);
 }
 
+// ===================== pattern warp (pattern map) =====================
+// Map coords: s = 0..1 along the band (0.5 = front), v = 0..1 across it (1 = top edge).
+// Two warps are applied to where the TPMS lattice is sampled:
+//  1. frame grid: P.gx x 3 control nodes; node offsets (P.goff, in s / v units) are blended with
+//     Catmull-Rom splines, and the lattice under a node moves with it (q = p - G(p));
+//  2. attractors (P.att: {u, v, r mm, s}): radial warp q = p + s*(p - a)*exp(-|p - a|^2 / r^2),
+//     so at the centre the cells are (1 + s) times smaller; s < 0 makes them bigger.
+// sig = largest stretch of the whole map (mm per mm). Dividing the cell size by it keeps the
+// distance field honest, so walls keep their thickness where the cells get denser.
+const GRID_ROWS = 3;
+function makeWarp(P, closed, L, Wn) {
+  const att = (P.att || []).slice(0, 8), G = P.goff, gx = P.gx || 0, GY = GRID_ROWS;
+  const hasG = !!(G && gx && G.some((x) => x !== 0));
+  if (!att.length && !hasG) return null;
+  const out = { s: 0, v: 0, sig: 1 };
+  const ws = [0, 0, 0, 0], dws = [0, 0, 0, 0], wv = [0, 0, 0, 0], dwv = [0, 0, 0, 0];
+  const cw = (f, w, dw) => {
+    const f2 = f * f, f3 = f2 * f;
+    w[0] = 0.5 * (-f + 2 * f2 - f3); w[1] = 0.5 * (2 - 5 * f2 + 3 * f3); w[2] = 0.5 * (f + 4 * f2 - 3 * f3); w[3] = 0.5 * (-f2 + f3);
+    dw[0] = 0.5 * (-1 + 4 * f - 3 * f2); dw[1] = 0.5 * (-10 * f + 9 * f2); dw[2] = 0.5 * (1 + 8 * f - 9 * f2); dw[3] = 0.5 * (-2 * f + 3 * f2);
+  };
+  const ns = closed ? gx : gx - 1;
+  return (s, v) => {
+    let a = 1, b = 0, c = 0, d = 1, s1 = s, v1 = v;
+    if (hasG) {
+      const ts = closed ? (((s % 1) + 1) % 1) * ns : Math.min(Math.max(s, 0), 1) * ns;
+      let i = Math.floor(ts); if (!closed) i = Math.min(i, gx - 2);
+      const tv = Math.min(Math.max(v, 0), 1) * (GY - 1), j = Math.min(Math.floor(tv), GY - 2);
+      cw(ts - i, ws, dws); cw(tv - j, wv, dwv);
+      let gs = 0, gv = 0, gss = 0, gsv = 0, gvs = 0, gvv = 0;
+      for (let q = 0; q < 4; q++) {
+        let ii = i - 1 + q;
+        ii = closed ? (ii < 0 ? ii + gx : ii >= gx ? ii - gx : ii) : Math.min(Math.max(ii, 0), gx - 1);
+        for (let r = 0; r < 4; r++) {
+          const jj = Math.min(Math.max(j - 1 + r, 0), GY - 1), k = 2 * (jj * gx + ii), ou = G[k], ov = G[k + 1];
+          const w = ws[q] * wv[r], wS = dws[q] * wv[r], wV = ws[q] * dwv[r];
+          gs += w * ou; gv += w * ov; gss += wS * ou; gsv += wV * ou; gvs += wS * ov; gvv += wV * ov;
+        }
+      }
+      gss *= ns; gvs *= ns; gsv *= GY - 1; gvv *= GY - 1;
+      s1 = s - gs; v1 = v - gv;
+      a = 1 - gss; b = -gsv * L / Wn; c = -gvs * Wn / L; d = 1 - gvv;
+    }
+    const X = s1 * L, Y = v1 * Wn;
+    let dX = 0, dY = 0, jxx = 0, jxy = 0, jyy = 0;
+    for (const t of att) {
+      let dx = X - t.u * L; if (closed) dx -= L * Math.round(dx / L);
+      const dy = Y - t.v * Wn, r2 = t.r * t.r, q = (dx * dx + dy * dy) / r2;
+      if (q > 9) continue;
+      const g = t.s * Math.exp(-q);
+      dX += g * dx; dY += g * dy;
+      jxx += g * (1 - 2 * dx * dx / r2); jxy -= g * 2 * dx * dy / r2; jyy += g * (1 - 2 * dy * dy / r2);
+    }
+    const A = 1 + jxx, D = 1 + jyy;
+    const m00 = A * a + jxy * c, m01 = A * b + jxy * d, m10 = jxy * a + D * c, m11 = jxy * b + D * d;
+    const e = m00 * m00 + m01 * m01 + m10 * m10 + m11 * m11, det = m00 * m11 - m01 * m10;
+    out.s = (X + dX) / L; out.v = (Y + dY) / Wn;
+    out.sig = Math.max(Math.sqrt((e + Math.sqrt(Math.max(e * e - 4 * det * det, 0))) / 2), 0.05);
+    return out;
+  };
+}
+
 function makeField(P) {
   const F = compileExpr(P.kind === 'custom' ? P.expr : TPMS[P.kind] || TPMS.gyroid);
   const TAU = 2 * Math.PI;
@@ -419,6 +481,7 @@ function makeField(P) {
   const hs = span / 2, xr = closed ? Ro : Ro * Math.sin(Math.min(hs, Math.PI / 2)) + 1;
   const ylo = closed ? -Ro : (Math.cos(hs) < 0 ? Ro * Math.cos(hs) : P.rin * Math.cos(hs)) - 1;
   const bb = { lo: [-xr, ylo, zmin - tz - 1], hi: [xr, Ro, zmax + tz + 1] };
+  const warp = makeWarp(P, closed, span * Rmid, P.W);
   const f = (x, y, z) => {
     const r = Math.hypot(x, y);
     let th = Math.atan2(y, x) - Math.PI / 2; // 0 at front (+Y)
@@ -432,8 +495,10 @@ function makeField(P) {
     const qx = Math.abs(w) - T / 2 + rr, qz = Math.abs(zz - zc) - h + rr;
     let d = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - rr;
     if (!closed) d = Math.max(d, (Math.abs(th) - span / 2) * Math.max(r, 1));
-    const cv = 2 * h / P.nV, cmin = Math.min(cu * r / Rmid, cv, cw);
-    const U = s * P.nU, V = (zz - zc) / (2 * h) * P.nV + (P.twist || 0) * s, W = w / cw;
+    const cv = 2 * h / P.nV;
+    let cmin = Math.min(cu * r / Rmid, cv, cw), su = s, vq = (zz - zc) / (2 * h) + 0.5;
+    if (warp) { const q = warp(s, vq); su = q.s; vq = q.v; cmin /= q.sig; }
+    const U = su * P.nU, V = (vq - 0.5) * P.nV + (P.twist || 0) * su, W = w / cw;
     let out = Math.max(d, tpmsDist(U, V, W, cmin));
     if (P.rim > 0) out = Math.min(out, Math.max(d, Math.min(zz - bot, top - zz) - P.rim));
     return out;
@@ -541,7 +606,7 @@ function removeIslands(positions, indices, keepFrac = 0.05) {
   return { positions: new Float32Array(outP), indices: outI, islands };
 }
 
-if (typeof module !== 'undefined') module.exports = { TPMS, compileExpr, exprGLSL, makeField, meshField, simplifyMesh, meshVolume, removeIslands, MC };
+if (typeof module !== 'undefined') module.exports = { TPMS, compileExpr, exprGLSL, makeField, makeWarp, GRID_ROWS, meshField, simplifyMesh, meshVolume, removeIslands, MC };
 if (typeof self !== 'undefined' && typeof window === 'undefined' && typeof module === 'undefined') {
   self.onmessage = (e) => {
     const m = e.data;

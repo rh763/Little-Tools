@@ -65,6 +65,18 @@
         <div id="patFields" class="group"></div>
       </section>
 
+      <section class="group" id="mapSec">
+        <div class="tabline"><h2 class="tab">Pattern map</h2><button type="button" class="qi" data-help="map">?</button></div>
+        <p class="hint-line">The band, unrolled (front in the middle). Drag the grid points to bend the cells. Double-click to add an attractor, drag it to move, scroll on it to resize, double-click it to remove.</p>
+        <canvas id="map" class="pmap" aria-label="Pattern map: unrolled band with draggable frame grid and attractor points"></canvas>
+        <div class="btns">
+          <button type="button" class="b" id="mapAdd">Add attractor</button>
+          <button type="button" class="b" id="mapReset">Reset map</button>
+        </div>
+        <div id="mapGrid" class="group"></div>
+        <div id="mapFields" class="group"></div>
+      </section>
+
       <section class="group">
         <div class="tabline"><h2 class="tab">Mesh</h2><button type="button" class="qi" data-help="mesh">?</button></div>
         <div class="row">

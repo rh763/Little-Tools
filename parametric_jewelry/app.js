@@ -34,7 +34,7 @@ const DEF = {
 };
 const isOpen = (c) => c === 'tiara' || c === 'choker';
 const PAT = { kind: 'gyroid', expr: TPMS.gyroid, mode: 'sheet', iso: 0 };
-const fresh = (c) => ({ ...PAT, ...DEF[c] });
+const fresh = (c) => ({ ...PAT, ...DEF[c], gx: 8, goff: null, att: [] }); // gx/goff/att: pattern map
 const S = { cat: 'ring', finger: 'ring', byCat: {}, res: 0.1, simp: 0.01, metal: 'ag925', fmt: 'stl', xu: 'mm', wire: false };
 for (const c of Object.keys(DEF)) S.byCat[c] = fresh(c);
 const cur = () => S.byCat[S.cat];
@@ -127,6 +127,7 @@ function buildFields() {
     $('exprNote').hidden = true;
   };
   syncPattern();
+  buildMap();
 }
 let syncPattern = () => {};
 
@@ -164,6 +165,10 @@ const HELP = {
   simp: 'Reduces the number of triangles after processing. Flat areas get large triangles, curved areas keep detail. The value is the largest allowed change in shape. The mesh stays closed and watertight.',
   export: 'Download the processed mesh for printing, casting or CAD.',
   metal: 'Used only to estimate the weight from the mesh volume, and to colour the preview.',
+  map: 'The band unrolled flat: left to right goes around the piece (the front is in the middle), bottom to top goes across its width. The grey pattern is a slice through the middle of the lattice. Drag the black grid points to pull the cells along with them (a warped frame grid). Yellow attractor points make the cells denser around them (positive strength) or larger and more open (negative strength). Walls keep their thickness everywhere, so denser areas are also stiffer and heavier.',
+  gx: 'How many columns of control points the frame grid has around the band. Changing it resets the grid.',
+  attS: 'Positive values pack more, smaller cells around the attractor (up to about 3 times denser at its centre). Negative values open the cells up.',
+  attR: 'How far the attractor reaches, in mm along the band.',
 };
 function wireHelp(rootEl) {
   rootEl.querySelectorAll('.qi[data-help]').forEach((btn) => {
@@ -326,7 +331,8 @@ function params() {
   if (c === 'earring') return Object.assign(P, { D: p.D, elong: p.elong });
   // choker: open arc centred at the front, the back opening (mm along the band) sets the span
   const span = c === 'choker' ? Math.max(180, 360 * (1 - p.gap / (2 * Math.PI * (p.rin + p.T / 2)))) : p.span || 360;
-  Object.assign(P, { rin: p.rin, T: p.T, W: p.W, round: p.round, tilt: p.tilt, span, top: [], bot: [] });
+  Object.assign(P, { rin: p.rin, T: p.T, W: p.W, round: p.round, tilt: p.tilt, span, top: [], bot: [],
+    gx: p.gx, goff: [...gridOf(p)], att: p.att.map((a) => ({ ...a })) });
   const closed = !isOpen(c), N = closed ? 32 : 33;
   for (let i = 0; i < N; i++) {
     const s = closed ? i / N : i / (N - 1);
@@ -403,7 +409,7 @@ function changed(fit = false) {
   clearTimeout(tChange);
   $('busy').hidden = false; $('busy').textContent = 'Updating\u2026';
   const P0 = params();
-  updateImplicit(P0); updateMannequin(P0);
+  updateImplicit(P0); updateMannequin(P0); queueMap();
   tChange = setTimeout(() => {
     const P = params();
     submit({ type: 'mesh', params: P, voxel: previewVoxel(P), simplify: 0, final: false, fit, key: keyOf() });
@@ -477,6 +483,158 @@ $('download').addEventListener('click', () => {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 });
+
+// ---------------- pattern map (unrolled band: frame grid + attractors) ----------------
+// Same data the field uses (worker.js makeWarp): goff = GRID_ROWS x gx node offsets in (s, v),
+// att = [{u, v, r (mm), s}]. The grey picture is the lattice sliced at mid-thickness.
+const mapCv = $('map'), mapCtx = mapCv.getContext('2d'), mapOff = document.createElement('canvas');
+let selAtt = -1, drag = null, mapQueued = false;
+function gridOf(p) {
+  const n = 2 * GRID_ROWS * (p.gx || 8);
+  if (!p.goff || p.goff.length !== n) p.goff = new Array(n).fill(0);
+  return p.goff;
+}
+const mapGeo = () => {
+  const P = params(), closed = !isOpen(S.cat), Rmid = P.rin + P.T / 2;
+  return { P, closed, L: (closed ? 2 * Math.PI : P.span * Math.PI / 180) * Rmid, Wn: P.W };
+};
+const PAD = 7;
+function mapSize() {
+  const r = mapCv.getBoundingClientRect();
+  return { w: Math.max(r.width, 50), h: Math.max(r.height, 40) };
+}
+const toPx = (s, v, w, h) => [PAD + s * (w - 2 * PAD), PAD + (1 - v) * (h - 2 * PAD)];
+const fromPx = (x, y, w, h) => [(x - PAD) / (w - 2 * PAD), 1 - (y - PAD) / (h - 2 * PAD)];
+function nodeRest(i, j, gx, closed) { return [closed ? i / gx : i / (gx - 1), j / (GRID_ROWS - 1)]; }
+function drawMap() {
+  mapQueued = false;
+  if (S.cat === 'earring') return;
+  const { w, h } = mapSize(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (mapCv.width !== Math.round(w * dpr) || mapCv.height !== Math.round(h * dpr)) { mapCv.width = Math.round(w * dpr); mapCv.height = Math.round(h * dpr); }
+  const { P, closed, L, Wn } = mapGeo(), p = cur();
+  // lattice slice (half-res offscreen image)
+  const iw = Math.round((w - 2 * PAD) / 1.5), ih = Math.round((h - 2 * PAD) / 1.5);
+  mapOff.width = iw; mapOff.height = ih;
+  const octx = mapOff.getContext('2d'), img = octx.createImageData(iw, ih);
+  let F; try { F = compileExpr(P.kind === 'custom' ? P.expr : TPMS[P.kind] || TPMS.gyroid); } catch (e) { return; }
+  const warp = makeWarp(P, closed, L, Wn), TAU = 2 * Math.PI;
+  const cu = L / P.nU, cw = (cu + Wn / P.nV) / 2 / (P.nW || 1), cm0 = Math.min(cu, Wn / P.nV, cw);
+  const pxmm = Math.max(L / iw, Wn / ih);
+  for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
+    const s = (x + 0.5) / iw, v = 1 - (y + 0.5) / ih;
+    let su = s, vq = v, cm = cm0;
+    if (warp) { const q = warp(s, v); su = q.s; vq = q.v; cm /= q.sig; }
+    const f = F(TAU * su * P.nU, TAU * ((vq - 0.5) * P.nV + P.twist * su), 0);
+    let d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f) * cm / TAU - P.thick / 2;
+    if (P.rim > 0) d = Math.min(d, Math.min(v, 1 - v) * Wn - P.rim);
+    const a = Math.min(Math.max(0.5 - d / pxmm, 0), 1), o = 4 * (y * iw + x);
+    const c = 255 - a * 150;
+    img.data[o] = c; img.data[o + 1] = c; img.data[o + 2] = c + a * 6; img.data[o + 3] = 255;
+  }
+  octx.putImageData(img, 0, 0);
+  const g = mapCtx;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  g.imageSmoothingEnabled = true; g.drawImage(mapOff, PAD, PAD, w - 2 * PAD, h - 2 * PAD);
+  g.strokeStyle = '#141416'; g.lineWidth = 1; g.strokeRect(PAD - 0.5, PAD - 0.5, w - 2 * PAD + 1, h - 2 * PAD + 1);
+  // front marker
+  const [fx] = toPx(0.5, 0, w, h);
+  g.fillStyle = '#6c6c73'; g.font = '9px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText('front', fx, h - 0.5);
+  // frame grid
+  const G = gridOf(p), gx = p.gx, pt = (i, j) => { const [s, v] = nodeRest(i, j, gx, closed), k = 2 * (j * gx + i); return toPx(s + G[k], v + G[k + 1], w, h); };
+  g.strokeStyle = 'rgba(20,20,22,0.55)'; g.beginPath();
+  for (let j = 0; j < GRID_ROWS; j++) for (let i = 0; i < (closed ? gx : gx - 1); i++) {
+    const a = pt(i, j);
+    if (closed && i === gx - 1) { const b = pt(0, j); g.moveTo(...a); g.lineTo(b[0] + (w - 2 * PAD), b[1]); }
+    else { const b = pt(i + 1, j); g.moveTo(...a); g.lineTo(...b); }
+  }
+  for (let i = 0; i < gx; i++) for (let j = 0; j < GRID_ROWS - 1; j++) { g.moveTo(...pt(i, j)); g.lineTo(...pt(i, j + 1)); }
+  g.stroke();
+  for (let j = 0; j < GRID_ROWS; j++) for (let i = 0; i < gx; i++) {
+    const [x, y] = pt(i, j), on = drag && drag.kind === 'node' && drag.i === i && drag.j === j;
+    g.fillStyle = on ? '#f3e500' : '#141416'; g.fillRect(x - 3, y - 3, 6, 6);
+  }
+  // attractors: dashed ellipse = radius, filled dot = centre (+ dense, - open)
+  p.att.forEach((t, k) => {
+    const [x, y] = toPx(t.u, t.v, w, h), rx = t.r / L * (w - 2 * PAD), ry = t.r / Wn * (h - 2 * PAD);
+    g.setLineDash([3, 3]); g.strokeStyle = '#141416'; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 2 * Math.PI); g.stroke(); g.setLineDash([]);
+    g.beginPath(); g.arc(x, y, k === selAtt ? 7 : 5.5, 0, 2 * Math.PI);
+    g.fillStyle = t.s >= 0 ? '#f3e500' : '#ffffff'; g.fill(); g.lineWidth = k === selAtt ? 2 : 1; g.stroke(); g.lineWidth = 1;
+    g.fillStyle = '#141416'; g.fillText(t.s >= 0 ? '+' : '\u2212', x, y + 3);
+  });
+}
+function queueMap() { if (!mapQueued) { mapQueued = true; requestAnimationFrame(drawMap); } }
+new ResizeObserver(queueMap).observe(mapCv);
+function hitMap(e) {
+  const r = mapCv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, { w, h } = mapSize(), p = cur();
+  for (let k = p.att.length - 1; k >= 0; k--) { const [ax, ay] = toPx(p.att[k].u, p.att[k].v, w, h); if (Math.hypot(ax - x, ay - y) < 9) return { kind: 'att', k, x, y }; }
+  const closed = !isOpen(S.cat), G = gridOf(p);
+  let best = null, bd = 9;
+  for (let j = 0; j < GRID_ROWS; j++) for (let i = 0; i < p.gx; i++) {
+    const [s, v] = nodeRest(i, j, p.gx, closed), kk = 2 * (j * p.gx + i), [nx, ny] = toPx(s + G[kk], v + G[kk + 1], w, h);
+    const d = Math.hypot(nx - x, ny - y); if (d < bd) { bd = d; best = { kind: 'node', i, j, x, y }; }
+  }
+  return best || { kind: 'none', x, y };
+}
+function selectAtt(k) { selAtt = k; buildAttFields(); queueMap(); }
+mapCv.addEventListener('pointerdown', (e) => {
+  const hit = hitMap(e);
+  if (hit.kind === 'none') { if (selAtt >= 0) selectAtt(-1); return; }
+  drag = hit; mapCv.setPointerCapture(e.pointerId);
+  if (hit.kind === 'att') selectAtt(hit.k);
+  e.preventDefault();
+});
+mapCv.addEventListener('pointermove', (e) => {
+  if (!drag) { mapCv.style.cursor = hitMap(e).kind === 'none' ? 'crosshair' : 'grab'; return; }
+  const r = mapCv.getBoundingClientRect(), { w, h } = mapSize(), p = cur();
+  let [s, v] = fromPx(e.clientX - r.left, e.clientY - r.top, w, h);
+  if (drag.kind === 'att') {
+    const t = p.att[drag.k]; t.u = isOpen(S.cat) ? Math.min(Math.max(s, 0), 1) : ((s % 1) + 1) % 1; t.v = Math.min(Math.max(v, 0), 1);
+  } else {
+    const closed = !isOpen(S.cat), [s0, v0] = nodeRest(drag.i, drag.j, p.gx, closed), G = gridOf(p), k = 2 * (drag.j * p.gx + drag.i);
+    const ms = 0.42 / (closed ? p.gx : p.gx - 1), mv = 0.42 / (GRID_ROWS - 1); // keep the grid from folding over
+    G[k] = Math.min(Math.max(s - s0, -ms), ms); G[k + 1] = Math.min(Math.max(v - v0, -mv), mv);
+  }
+  changed();
+});
+const endDrag = () => { if (drag) { drag = null; queueMap(); } };
+mapCv.addEventListener('pointerup', endDrag); mapCv.addEventListener('pointercancel', endDrag);
+mapCv.addEventListener('dblclick', (e) => {
+  const hit = hitMap(e), p = cur();
+  if (hit.kind === 'att') { p.att.splice(hit.k, 1); selectAtt(-1); changed(); return; }
+  if (hit.kind === 'node') { const k = 2 * (hit.j * p.gx + hit.i); gridOf(p)[k] = 0; gridOf(p)[k + 1] = 0; changed(); return; }
+  const { w, h } = mapSize(), [s, v] = fromPx(hit.x, hit.y, w, h);
+  addAtt(Math.min(Math.max(s, 0), 1), Math.min(Math.max(v, 0), 1));
+});
+mapCv.addEventListener('wheel', (e) => {
+  const hit = hitMap(e); if (hit.kind !== 'att') return;
+  e.preventDefault();
+  const t = cur().att[hit.k], { L } = mapGeo();
+  t.r = Math.min(Math.max(t.r * Math.pow(1.1, e.deltaY > 0 ? -1 : 1), 0.5), L / 2);
+  selectAtt(hit.k); changed();
+}, { passive: false });
+function addAtt(u, v) {
+  const p = cur(); if (p.att.length >= 8) return;
+  const { L, Wn } = mapGeo();
+  p.att.push({ u, v, r: +Math.max(Math.min(L / 6, 3 * Wn), 1).toFixed(1), s: 1 });
+  selectAtt(p.att.length - 1); changed();
+}
+$('mapAdd').addEventListener('click', () => addAtt(0.5, 0.5));
+$('mapReset').addEventListener('click', () => { const p = cur(); p.goff = null; p.att = []; selectAtt(-1); changed(); });
+function buildAttFields() {
+  const f = $('mapFields'); f.innerHTML = '';
+  const t = cur().att[selAtt]; if (!t) return;
+  const A = (k) => ({ get: () => cur().att[selAtt][k], set: (v) => (cur().att[selAtt][k] = v) });
+  slider(f, { id: 'attS', label: `Attractor ${selAtt + 1} strength`, help: 'attS', hint: () => '+ denser, \u2212 open', min: -0.8, max: 2, step: 0.05, ...A('s') });
+  slider(f, { id: 'attR', label: 'Attractor radius', help: 'attR', unit: 'mm', min: 0.5, max: +(mapGeo().L / 2).toFixed(1), step: 0.1, ...A('r') });
+}
+function buildMap() {
+  $('mapSec').hidden = S.cat === 'earring';
+  $('mapGrid').innerHTML = ''; selAtt = -1; $('mapFields').innerHTML = '';
+  if (S.cat === 'earring') return;
+  slider($('mapGrid'), { id: 'gx', label: 'Grid columns', help: 'gx', int: true, min: 4, max: 16, step: 1,
+    get: () => cur().gx, set: (v) => { if (v !== cur().gx) { cur().gx = v; cur().goff = null; } } });
+  queueMap();
+}
 
 // ---------------- go ----------------
 buildFields();

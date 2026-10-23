@@ -9,6 +9,7 @@ uniform mat4 uInvModel, uModel, uProj; uniform vec3 uLo, uHi, uColor;
 uniform int uCat, uMode, uN; uniform bool uClosed;
 uniform float uNorm, uIso, uThick, uRim, uNU, uNV, uTwist, uRin, uT, uW, uRound, uTanT, uSpan, uCu, uCw, uD, uElong, uMetal;
 uniform float uTop[33];
+uniform int uGx, uNA; uniform float uL, uWn; uniform float uGo[96]; uniform vec4 uAtt[8];
 varying vec3 vLocal;
 const float PI = 3.14159265359, TAU = 6.28318530718;
 float pw(float a, float b) { return (b == floor(b) && mod(b, 2.0) == 0.0) ? pow(abs(a), b) : sign(a) * pow(abs(a), b); }
@@ -19,6 +20,50 @@ float tpd(float u, float v, float w, float cm) {
   return uMode == 1 ? (f - uIso) * cm / TAU : abs(f) * cm / TAU - uThick * 0.5;
 }
 float gT(int k) { int n = uN; k = uClosed ? ((k % n) + n) % n : clamp(k, 0, n - 1); return uTop[k]; }
+// pattern-map warp, same as worker.js makeWarp: returns (s, v, stretch)
+void cw4(float f, out vec4 w, out vec4 dw) {
+  float f2 = f * f, f3 = f2 * f;
+  w = 0.5 * vec4(-f + 2.0 * f2 - f3, 2.0 - 5.0 * f2 + 3.0 * f3, f + 4.0 * f2 - 3.0 * f3, -f2 + f3);
+  dw = 0.5 * vec4(-1.0 + 4.0 * f - 3.0 * f2, -10.0 * f + 9.0 * f2, 1.0 + 8.0 * f - 9.0 * f2, -2.0 * f + 3.0 * f2);
+}
+vec3 warp(float s, float v) {
+  float a = 1.0, b = 0.0, c = 0.0, d = 1.0, s1 = s, v1 = v;
+  if (uGx > 0) {
+    int gx = uGx; float ns = uClosed ? float(gx) : float(gx - 1);
+    float ts = uClosed ? fract(s) * ns : clamp(s, 0.0, 1.0) * ns;
+    int i = int(floor(ts)); if (!uClosed) i = min(i, gx - 2);
+    float tv = clamp(v, 0.0, 1.0) * 2.0; int j = min(int(floor(tv)), 1);
+    vec4 ws, dws, wv, dwv; cw4(ts - float(i), ws, dws); cw4(tv - float(j), wv, dwv);
+    float gs = 0.0, gv = 0.0, gss = 0.0, gsv = 0.0, gvs = 0.0, gvv = 0.0;
+    for (int q = 0; q < 4; q++) {
+      int ii = i - 1 + q;
+      ii = uClosed ? (ii < 0 ? ii + gx : (ii >= gx ? ii - gx : ii)) : clamp(ii, 0, gx - 1);
+      for (int r = 0; r < 4; r++) {
+        int jj = clamp(j - 1 + r, 0, 2), k = 2 * (jj * gx + ii);
+        float ou = uGo[k], ov = uGo[k + 1], w = ws[q] * wv[r], wS = dws[q] * wv[r], wV = ws[q] * dwv[r];
+        gs += w * ou; gv += w * ov; gss += wS * ou; gsv += wV * ou; gvs += wS * ov; gvv += wV * ov;
+      }
+    }
+    gss *= ns; gvs *= ns; gsv *= 2.0; gvv *= 2.0;
+    s1 = s - gs; v1 = v - gv;
+    a = 1.0 - gss; b = -gsv * uL / uWn; c = -gvs * uWn / uL; d = 1.0 - gvv;
+  }
+  float X = s1 * uL, Y = v1 * uWn, dX = 0.0, dY = 0.0, jxx = 0.0, jxy = 0.0, jyy = 0.0;
+  for (int k = 0; k < 8; k++) {
+    if (k >= uNA) break;
+    vec4 t = uAtt[k];
+    float dx = X - t.x * uL; if (uClosed) dx -= uL * floor(dx / uL + 0.5);
+    float dy = Y - t.y * uWn, r2 = t.z * t.z, q = (dx * dx + dy * dy) / r2;
+    if (q > 9.0) continue;
+    float g = t.w * exp(-q);
+    dX += g * dx; dY += g * dy;
+    jxx += g * (1.0 - 2.0 * dx * dx / r2); jxy -= g * 2.0 * dx * dy / r2; jyy += g * (1.0 - 2.0 * dy * dy / r2);
+  }
+  float A = 1.0 + jxx, D = 1.0 + jyy;
+  float m00 = A * a + jxy * c, m01 = A * b + jxy * d, m10 = jxy * a + D * c, m11 = jxy * b + D * d;
+  float e = m00 * m00 + m01 * m01 + m10 * m10 + m11 * m11, dt = m00 * m11 - m01 * m10;
+  return vec3((X + dX) / uL, (Y + dY) / uWn, max(sqrt((e + sqrt(max(e * e - 4.0 * dt * dt, 0.0))) * 0.5), 0.05));
+}
 float prof(float s) {
   float n = float(uN), t; int i;
   if (uClosed) { t = fract(s) * n; i = int(floor(t)); }
@@ -54,7 +99,9 @@ float field(vec3 p) {
   float d = length(max(vec2(qx, qz), 0.0)) + min(max(qx, qz), 0.0) - rr;
   if (!uClosed) d = max(d, (abs(th) - uSpan * 0.5) * max(r, 1.0));
   float cm = min(min(uCu * r / Rmid, 2.0 * h / uNV), uCw);
-  float U = s * uNU, V = (zz - zc) / (2.0 * h) * uNV + uTwist * s, W = w / uCw;
+  float su = s, vq = (zz - zc) / (2.0 * h) + 0.5;
+  if (uGx > 0 || uNA > 0) { vec3 q = warp(s, vq); su = q.x; vq = q.y; cm /= q.z; }
+  float U = su * uNU, V = (vq - 0.5) * uNV + uTwist * su, W = w / uCw;
   float o = max(d, tpd(U, V, W, cm));
   if (uRim > 0.0) o = min(o, max(d, min(zz - bot, top - zz) - uRim));
   return o;
@@ -100,7 +147,9 @@ export function makeImplicitView() {
   const U = {};
   for (const k of ['uNorm', 'uIso', 'uThick', 'uRim', 'uNU', 'uNV', 'uTwist', 'uRin', 'uT', 'uW', 'uRound', 'uTanT', 'uSpan', 'uCu', 'uCw', 'uD', 'uElong', 'uMetal']) U[k] = { value: 0 };
   Object.assign(U, { uInvModel: { value: new THREE.Matrix4() }, uModel: { value: new THREE.Matrix4() }, uProj: { value: new THREE.Matrix4() }, uLo: { value: new THREE.Vector3() }, uHi: { value: new THREE.Vector3() },
-    uColor: { value: new THREE.Color() }, uCat: { value: 0 }, uMode: { value: 0 }, uN: { value: 32 }, uClosed: { value: true }, uTop: { value: new Array(33).fill(0) } });
+    uColor: { value: new THREE.Color() }, uCat: { value: 0 }, uMode: { value: 0 }, uN: { value: 32 }, uClosed: { value: true }, uTop: { value: new Array(33).fill(0) },
+    uGx: { value: 0 }, uNA: { value: 0 }, uL: { value: 1 }, uWn: { value: 1 }, uGo: { value: new Array(96).fill(0) },
+    uAtt: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) } });
   // placeholder material until the first update() compiles the shader
   // (a null material crashes three.js's render loop on `material.visible`)
   const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ visible: false }));
@@ -134,6 +183,13 @@ export function makeImplicitView() {
     U.uRound.value = P.round; U.uTanT.value = Math.tan(P.tilt * Math.PI / 180);
     U.uCu.value = span * Rmid / P.nU; U.uCw.value = (span * Rmid / P.nU + P.W / P.nV) / 2 / (P.nW || 1);
     U.uN.value = P.top.length; for (let i = 0; i < 33; i++) U.uTop.value[i] = P.top[i] || 0;
+    // pattern map (frame grid + attractors), see worker.js makeWarp
+    U.uL.value = span * Rmid; U.uWn.value = P.W;
+    const G = P.goff, gx = P.gx || 0, hasG = !!(G && gx && G.some((x) => x !== 0));
+    U.uGx.value = hasG ? gx : 0;
+    for (let i = 0; i < 96; i++) U.uGo.value[i] = (hasG && G[i]) || 0;
+    const att = (P.att || []).slice(0, 8); U.uNA.value = att.length;
+    att.forEach((t, i) => U.uAtt.value[i].set(t.u, t.v, t.r, t.s));
   }
   return { object: box, update };
 }
