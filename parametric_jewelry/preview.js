@@ -102,7 +102,12 @@ float field(vec3 p) {
   float su = s, vq = (zz - zc) / (2.0 * h) + 0.5;
   if (uGx > 0 || uNA > 0) { vec3 q = warp(s, vq); su = q.x; vq = q.y; cm /= q.z; }
   float U = su * uNU, V = (vq - 0.5) * uNV + uTwist * su, W = w / uCw;
-  float o = max(d, tpd(U, V, W, cm));
+  float tt = tpd(U, V, W, cm);
+  if (uClosed) { // seamless closed band, same blend as worker.js
+    float bw = min(0.5, 1.0 / max(uNU, 1.0)), k = (s - (1.0 - bw)) / bw;
+    if (k > 0.0) { float b = smoothstep(0.0, 1.0, k); tt = mix(tt, tpd(U - uNU, V - uTwist, W, cm), b); }
+  }
+  float o = max(d, tt);
   if (uRim > 0.0) o = min(o, max(d, min(zz - bot, top - zz) - uRim));
   return o;
 }

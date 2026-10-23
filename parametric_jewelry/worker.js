@@ -499,7 +499,18 @@ function makeField(P) {
     let cmin = Math.min(cu * r / Rmid, cv, cw), su = s, vq = (zz - zc) / (2 * h) + 0.5;
     if (warp) { const q = warp(s, vq); su = q.s; vq = q.v; cmin /= q.sig; }
     const U = su * P.nU, V = (vq - 0.5) * P.nV + (P.twist || 0) * su, W = w / cw;
-    let out = Math.max(d, tpmsDist(U, V, W, cmin));
+    let t = tpmsDist(U, V, W, cmin);
+    // seamless closed band: near the back seam (s -> 1) blend into the copy of the lattice that
+    // continues past s = 0 (shifted by one full turn). For a 2*pi-periodic TPMS both are equal,
+    // for any other formula / warp this forces the two sides of the seam to meet.
+    if (closed) {
+      const bw = Math.min(0.5, 1 / Math.max(P.nU, 1)), k = (s - (1 - bw)) / bw;
+      if (k > 0) {
+        const b = k * k * (3 - 2 * k);
+        t = (1 - b) * t + b * tpmsDist(U - P.nU, V - (P.twist || 0), W, cmin);
+      }
+    }
+    let out = Math.max(d, t);
     if (P.rim > 0) out = Math.min(out, Math.max(d, Math.min(zz - bot, top - zz) - P.rim));
     return out;
   };
