@@ -184,7 +184,7 @@ function wireHelp(rootEl) {
     });
   });
 }
-document.querySelectorAll('.side > section').forEach((s) => s.querySelectorAll(':scope > .tabline, :scope > .row').forEach(wireHelp));
+document.querySelectorAll('.side > section, #mapSec').forEach((s) => s.querySelectorAll(':scope > .tabline, :scope > .row').forEach(wireHelp));
 $('helpBtn').addEventListener('click', () => { const h = $('help'); h.hidden = !h.hidden; $('helpBtn').setAttribute('aria-expanded', String(!h.hidden)); });
 $('contactBtn').addEventListener('click', () => { const m = $('contactMsg'); m.hidden = !m.hidden; $('contactBtn').setAttribute('aria-expanded', String(!m.hidden)); });
 
@@ -329,6 +329,8 @@ function params() {
   const c = S.cat, p = cur();
   const P = { cat: c, kind: p.kind, expr: p.expr, mode: p.mode, thick: p.thick, iso: p.iso, rim: p.rim, nU: p.nU, nV: p.nV || 1, nW: p.nW || 1, twist: p.twist || 0 };
   if (c === 'earring') return Object.assign(P, { D: p.D, elong: p.elong });
+  // closed bands: whole cells around + whole twist, so the lattice joins at the seam
+  if (!isOpen(c)) { P.nU = Math.max(1, Math.round(P.nU)); P.twist = Math.round(P.twist); }
   // choker: open arc centred at the front, the back opening (mm along the band) sets the span
   const span = c === 'choker' ? Math.max(180, 360 * (1 - p.gap / (2 * Math.PI * (p.rin + p.T / 2)))) : p.span || 360;
   Object.assign(P, { rin: p.rin, T: p.T, W: p.W, round: p.round, tilt: p.tilt, span, top: [], bot: [],
