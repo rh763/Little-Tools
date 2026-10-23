@@ -205,13 +205,24 @@ button.b:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .finger-pick [data-finger]:hover, .finger-pick [data-finger]:focus-visible { fill: #9d9da8; }
 .finger-pick [data-finger].on { fill: var(--signal); }
 /* pattern map: unrolled band with frame grid + attractors */
-.pmap { display: block; width: 100%; height: 130px; border: 1px solid var(--ink); background: var(--paper); cursor: crosshair; touch-action: none; }
-/* pattern map panel docked on the right of the viewport, vertically centred */
+.pmap { display: block; width: 100%; height: 130px; margin: 0 auto; background: transparent; cursor: crosshair; touch-action: none; }
+/* pattern map floats over the viewport, no frame; drag the grip to move it */
 .vmap {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: min(340px, 42%);
-  max-height: calc(100% - 120px); overflow-y: auto; gap: 8px;
-  padding: 8px 10px; background: rgba(255, 255, 255, 0.88); border: 1px solid var(--ink);
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: min(320px, 42%);
+  max-height: calc(100% - 120px); overflow-y: auto; gap: 6px; padding: 4px 6px;
+  background: transparent; border: 0;
 }
+.vmap-bar { display: flex; align-items: center; gap: 4px; }
+.vmap .grip { cursor: move; color: var(--muted); font-size: 14px; letter-spacing: -3px; padding: 2px 8px 2px 0; user-select: none; touch-action: none; margin-right: auto; }
+.vmap .ib {
+  width: 24px; height: 24px; border: 0; padding: 0; cursor: pointer; font: 700 14px/24px var(--font-ui);
+  background: rgba(255, 255, 255, 0.6); color: var(--ink);
+}
+.vmap .ib:hover { background: var(--ink); color: var(--paper); }
+.vmap #mapRand { background: var(--signal); font-size: 16px; }
+.vmap #mapRand:hover { background: var(--ink); color: var(--signal); }
+.vmap .ctl { grid-template-columns: 1fr 58px 26px; }
+.vmap input[type=range], .vmap input[type=number] { background: rgba(255, 255, 255, 0.6); }
 @media (max-width: 760px) {
   .vmap { position: static; transform: none; width: auto; max-height: none; margin-top: 8px; }
   .view { height: auto; }

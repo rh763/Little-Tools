@@ -114,8 +114,7 @@ function buildFields() {
   if (c !== 'earring') {
     slider(p, { id: 'nV', label: 'Cells across width', help: 'nV', int: true, min: 1, max: 12, step: 1, ...P_('nV') });
     slider(p, { id: 'nW', label: 'Cells through thickness', help: 'nW', int: true, min: 1, max: 4, step: 1, ...P_('nW') });
-    slider(p, { id: 'twist', label: 'Twist', help: 'twist', int: !isOpen(c), min: -6, max: 6, step: isOpen(c) ? 0.1 : 1, unit: 'cells', ...P_('twist') });
-  }
+  } // twist (pattern rotation) lives next to the pattern map, see buildMap()
   const sheetRow = slider(p, { id: 'thick', label: 'Wall thickness', help: 'thick', unit: 'mm', min: 0.2, max: 3, step: 0.01, ...P_('thick') });
   const isoRow = slider(p, { id: 'iso', label: 'Network bias', help: 'iso', hint: () => '- thinner, + thicker', min: -1.2, max: 1.2, step: 0.01, ...P_('iso') });
   sheetRow.el = p.children[p.children.length - 2]; isoRow.el = p.lastElementChild;
@@ -274,13 +273,28 @@ function updateMannequin(P0) {
   // on the body the ring is tilted onto the finger so the arm stands upright (like the bangle)
   const wear = PV && PV.wearRotation && $('man').checked ? PV.wearRotation(P) : new THREE.Quaternion();
   root.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2).multiply(wear);
-  if (!PV || !$('man').checked) return;
-  manObj = PV.makeMannequin(P, matBody); root.add(manObj);
-  if (P.cat === 'earring') { // ear offsets: move the head the other way, so the piece (and its export) stay put
-    const e = cur(), dx = e.earX || 0;
-    manObj.position.set(-dx, -(e.earY || 0), -(e.earZ || 0));
-    pair.position.x = PV.EAR_PAIR_X - 2 * dx; // keep the pair mirrored about the head's mid-plane
+  if (PV && $('man').checked) {
+    manObj = PV.makeMannequin(P, matBody); root.add(manObj);
+    if (P.cat === 'earring') { // ear offsets: move the head the other way, so the piece (and its export) stay put
+      const e = cur(), dx = e.earX || 0;
+      manObj.position.set(-dx, -(e.earY || 0), -(e.earZ || 0));
+      pair.position.x = PV.EAR_PAIR_X - 2 * dx; // keep the pair mirrored about the head's mid-plane
+    }
   }
+  retarget(P0);
+}
+// orbit pivot = centre of the jewelry (for an earring pair on the body: midway between the two ears).
+// Moving the pivot also moves the camera by the same amount, so the view does not jump.
+function pivotOf(P) {
+  const { lo, hi } = makeField(P).bb, c = lo.map((v, i) => (v + hi[i]) / 2);
+  let R = Math.hypot(...lo.map((v, i) => hi[i] - v)) / 2;
+  if (P.cat === 'earring' && PV && $('man').checked) { const mx = pair.position.x / 2; R += Math.abs(mx - c[0]); c[0] = mx; }
+  return { c: new THREE.Vector3(...c).applyQuaternion(root.quaternion), R };
+}
+function retarget(P) {
+  const { c } = pivotOf(P), d = c.clone().sub(orbit.target);
+  if (d.lengthSq() < 1e-8) return;
+  orbit.target.add(d); camera.position.add(d);
 }
 $('man').addEventListener('change', () => updateMannequin(params()));
 // hand diagram: click a finger to move the ring there (only the mannequin changes, the camera stays put)
@@ -302,10 +316,8 @@ function resize() {
 new ResizeObserver(resize).observe(canvas.parentElement); resize();
 (function loop() { orbit.update(); syncPair(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
 function fitView() {
-  const bb = lastBB || makeField(params()).bb;
-  const c = bb.lo.map((v, i) => (v + bb.hi[i]) / 2), R = Math.hypot(...bb.lo.map((v, i) => bb.hi[i] - v)) / 2;
+  const { c: tgt, R } = pivotOf(params());
   const dist = R / Math.sin((camera.fov * Math.PI) / 360) * 1.05;
-  const tgt = new THREE.Vector3(c[0], c[1], c[2]).applyQuaternion(root.quaternion); // piece frame -> world
   orbit.target.copy(tgt);
   camera.position.copy(tgt).add(new THREE.Vector3(0.45, 0.5, 0.75).normalize().multiplyScalar(dist));
   camera.near = dist / 100; camera.far = dist * 20; camera.updateProjectionMatrix();
@@ -515,9 +527,15 @@ function nodeRest(i, j, gx, closed) { return [closed ? i / gx : i / (gx - 1), j 
 function drawMap() {
   mapQueued = false;
   const ear = S.cat === 'earring';
-  // earring: keep the map at the drop's own proportions (taller for a longer drop)
-  const mh = ear ? `${Math.round(Math.min(Math.max(130 * cur().elong, 110), 260))}px` : '';
+  // earring: the drawing area has the drop's own proportions (D wide, D * elong tall), like the model
+  let mw = '', mh = '';
+  if (ear) {
+    const pw = Math.max(mapCv.parentElement.clientWidth - 12, 120), e = cur().elong;
+    const iw0 = Math.min(pw - 2 * PAD, (300 - 2 * PAD) / e);
+    mw = `${Math.round(iw0 + 2 * PAD)}px`; mh = `${Math.round(iw0 * e + 2 * PAD)}px`;
+  }
   if (mapCv.style.height !== mh) mapCv.style.height = mh;
+  if (mapCv.style.width !== mw) mapCv.style.width = mw;
   const { w, h } = mapSize(), dpr = Math.min(window.devicePixelRatio || 1, 2);
   if (mapCv.width !== Math.round(w * dpr) || mapCv.height !== Math.round(h * dpr)) { mapCv.width = Math.round(w * dpr); mapCv.height = Math.round(h * dpr); }
   const { P, closed, L, Wn } = mapGeo(), p = cur();
@@ -546,18 +564,22 @@ function drawMap() {
       if (P.rim > 0) d = Math.min(d, Math.min(v, 1 - v) * Wn - P.rim);
     }
     const a = Math.min(Math.max(0.5 - d / pxmm, 0), 1), o = 4 * (y * iw + x);
-    const c = 255 - a * 150;
-    img.data[o] = c; img.data[o + 1] = c; img.data[o + 2] = c + a * 6; img.data[o + 3] = 255;
+    const c = 255 - a * 150, out = ear && Math.hypot((s - 0.5) * 2, (v - 0.5) * 2) > 1.02; // soft, no hard box behind it
+    img.data[o] = c; img.data[o + 1] = c; img.data[o + 2] = c + a * 6; img.data[o + 3] = out ? 0 : 150 + a * 105;
   }
   octx.putImageData(img, 0, 0);
   const g = mapCtx;
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
   g.imageSmoothingEnabled = true; g.drawImage(mapOff, PAD, PAD, w - 2 * PAD, h - 2 * PAD);
-  g.strokeStyle = '#141416'; g.lineWidth = 1; g.strokeRect(PAD - 0.5, PAD - 0.5, w - 2 * PAD + 1, h - 2 * PAD + 1);
-  // front marker
+  // no frame, no labels: the band gets a thin top/bottom edge, the earring its outline; a small tick marks the front
+  g.strokeStyle = '#141416'; g.lineWidth = 1;
   const [fx] = toPx(0.5, 0, w, h);
-  g.fillStyle = '#6c6c73'; g.font = '9px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText(ear ? 'bottom' : 'front', fx, h - 0.5);
-  if (ear) { g.fillText('hook', fx, PAD - 0.5); g.strokeStyle = '#6c6c73'; g.beginPath(); g.ellipse(fx, h / 2, (w - 2 * PAD) / 2, (h - 2 * PAD) / 2, 0, 0, 2 * Math.PI); g.stroke(); }
+  if (ear) { g.strokeStyle = '#6c6c73'; g.beginPath(); g.ellipse(fx, h / 2, (w - 2 * PAD) / 2, (h - 2 * PAD) / 2, 0, 0, 2 * Math.PI); g.stroke(); }
+  else {
+    g.beginPath(); g.moveTo(PAD, PAD - 0.5); g.lineTo(w - PAD, PAD - 0.5); g.moveTo(PAD, h - PAD + 0.5); g.lineTo(w - PAD, h - PAD + 0.5); g.stroke();
+    g.fillStyle = '#141416'; g.beginPath(); g.moveTo(fx, h - PAD + 1); g.lineTo(fx - 4, h); g.lineTo(fx + 4, h); g.fill();
+  }
+  g.font = '9px "IBM Plex Mono", monospace'; g.textAlign = 'center';
   // frame grid
   const G = gridOf(p), gx = p.gx, pt = (i, j) => { const [s, v] = nodeRest(i, j, gx, closed), k = 2 * (j * gx + i); return toPx(s + G[k], v + G[k + 1], w, h); };
   g.strokeStyle = 'rgba(20,20,22,0.55)'; g.beginPath();
@@ -649,13 +671,56 @@ function buildAttFields() {
 function buildMap() {
   $('mapSec').hidden = false;
   $('mapGrid').innerHTML = ''; selAtt = -1; $('mapFields').innerHTML = '';
-  $('mapHint').textContent = S.cat === 'earring'
-    ? 'The drop seen from the front (hook at the top). Drag the grid points to bend the cells. Double-click to add an attractor, drag it to move, scroll on it to resize, double-click it to remove.'
-    : 'The band, unrolled (front in the middle). Drag the grid points to bend the cells. Double-click to add an attractor, drag it to move, scroll on it to resize, double-click it to remove.';
-  slider($('mapGrid'), { id: 'gx', label: 'Grid columns', help: 'gx', int: true, min: 4, max: 16, step: 1,
+  // pattern rotation (twist) sits here, next to the map it turns
+  if (S.cat !== 'earring') slider($('mapGrid'), { id: 'twist', label: 'Twist', int: !isOpen(S.cat), min: -6, max: 6, step: isOpen(S.cat) ? 0.1 : 1, unit: 'cells', ...P_('twist') });
+  slider($('mapGrid'), { id: 'gx', label: 'Grid', int: true, min: 4, max: 16, step: 1,
     get: () => cur().gx, set: (v) => { if (v !== cur().gx) { cur().gx = v; cur().goff = null; } } });
   queueMap();
 }
+// one click: a random but well-behaved pattern (surface, solid type, cell counts, twist, warped grid, attractors)
+const rnd = (a, b) => a + Math.random() * (b - a), rint = (a, b) => Math.floor(rnd(a, b + 1)), pick = (a) => a[Math.floor(Math.random() * a.length)];
+$('mapRand').addEventListener('click', () => {
+  const p = cur(), c = S.cat, ear = c === 'earring', closed = mapClosed(), kinds = Object.keys(TPMS);
+  if (Math.random() < 0.3) { // blend of two surfaces
+    const a = pick(kinds), b = pick(kinds.filter((k) => k !== a)), w = +rnd(0.3, 0.7).toFixed(2);
+    p.kind = 'custom'; p.expr = `${w}*(${TPMS[a]}) + ${+(1 - w).toFixed(2)}*(${TPMS[b]})`;
+  } else { p.kind = pick(kinds); p.expr = TPMS[p.kind]; }
+  p.mode = Math.random() < 0.6 ? 'sheet' : 'strut';
+  p.iso = +rnd(-0.4, 0.4).toFixed(2);
+  if (ear) p.nU = rint(1, 4);
+  else {
+    const base = DEF[c].nU; p.nU = Math.max(4, Math.round(base * rnd(0.5, 1.6)));
+    p.nV = rint(1, Math.max(2, DEF[c].nV + 1)); p.nW = 1;
+    p.twist = Math.random() < 0.5 ? 0 : (closed ? rint(-2, 2) : +rnd(-2, 2).toFixed(1));
+  }
+  p.gx = rint(5, 10); p.goff = null;
+  const G = gridOf(p), ms = 0.42 / (closed ? p.gx : p.gx - 1), mv = 0.42 / (GRID_ROWS - 1);
+  const ph = rnd(0, 2 * Math.PI), fr = rint(1, 3), amp = rnd(0.3, 1);
+  for (let j = 0; j < GRID_ROWS; j++) for (let i = 0; i < p.gx; i++) { // smooth wave, not noise
+    const k = 2 * (j * p.gx + i), t = i / p.gx * 2 * Math.PI * fr + ph;
+    G[k] = amp * ms * Math.sin(t + j); G[k + 1] = (j === 1 ? 1 : 0.3) * amp * mv * Math.cos(t);
+  }
+  const { L, Wn } = mapGeo();
+  p.att = Array.from({ length: rint(0, 3) }, () => ({ u: +rnd(0.1, 0.9).toFixed(3), v: +rnd(0.2, 0.8).toFixed(3),
+    r: +Math.max(rnd(0.12, 0.3) * Math.min(L, ear ? L : 4 * Wn), 1).toFixed(1), s: +(Math.random() < 0.7 ? rnd(0.5, 1.6) : rnd(-0.6, -0.2)).toFixed(2) }));
+  buildFields(); changed();
+});
+// the map floats over the viewport without a frame; drag the grip to move it
+(() => {
+  const sec = $('mapSec'), grip = $('mapGrip'); let d = null;
+  grip.addEventListener('pointerdown', (e) => {
+    const r = sec.getBoundingClientRect(), v = sec.parentElement.getBoundingClientRect();
+    d = { dx: e.clientX - r.left, dy: e.clientY - r.top, v }; grip.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (!d) return;
+    const { v } = d, w = sec.offsetWidth, h = sec.offsetHeight;
+    sec.style.left = `${Math.min(Math.max(e.clientX - v.left - d.dx, 0), v.width - w)}px`;
+    sec.style.top = `${Math.min(Math.max(e.clientY - v.top - d.dy, 0), Math.max(v.height - h, 0))}px`;
+    sec.style.right = 'auto'; sec.style.transform = 'none';
+  });
+  const up = () => (d = null); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+})();
 
 // ---------------- go ----------------
 buildFields();
