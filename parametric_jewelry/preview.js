@@ -192,10 +192,10 @@ const RING_C = new THREE.Vector3(-15.5, 4.2, 590), RING_A = (() => { const tilt 
 // centre-line fits of the scan). s = finger radius there relative to the ring finger.
 const FINGERS = {
   ring: { c: RING_C, a: RING_A, s: 1 },
-  thumb: { c: new THREE.Vector3(35.62, 66.28, 566.40), a: new THREE.Vector3(-0.4901, -0.0412, 0.8707).normalize(), s: 0.975 },
-  index: { c: new THREE.Vector3(-7.81, 48.74, 605.19), a: new THREE.Vector3(-0.5525, -0.1506, 0.8198).normalize(), s: 1.141 },
-  middle: { c: new THREE.Vector3(-13.76, 26.47, 592.57), a: new THREE.Vector3(-0.4792, -0.1530, 0.8643).normalize(), s: 0.971 },
-  pinky: { c: new THREE.Vector3(-8.99, -19.30, 582.98), a: new THREE.Vector3(-0.3180, -0.1472, 0.9366).normalize(), s: 0.996 },
+  thumb: { c: new THREE.Vector3(35, 63, 565), a: (() => { const t = -38*Math.PI/180, z = -36*Math.PI/180; return new THREE.Vector3(Math.sin(t)*Math.cos(z), Math.sin(t)*Math.sin(z), Math.cos(t)); })(), s: 1.05 },
+  index: { c: new THREE.Vector3(-9.7, 46, 590), a: (() => { const t = -35*Math.PI/180, z = -20*Math.PI/180; return new THREE.Vector3(Math.sin(t)*Math.cos(z), Math.sin(t)*Math.sin(z), Math.cos(t)); })(), s: 1.05 },
+  middle: { c: new THREE.Vector3(-12.8, 24.5, 592.57), a: (() => { const t = -30*Math.PI/180, z = -5*Math.PI/180; return new THREE.Vector3(Math.sin(t)*Math.cos(z), Math.sin(t)*Math.sin(z), Math.cos(t)); })(), s: 1.09 },
+  pinky: { c: new THREE.Vector3(-11, -16.8, 580), a: (() => { const t = -33*Math.PI/180, z = 20*Math.PI/180; return new THREE.Vector3(Math.sin(t)*Math.cos(z), Math.sin(t)*Math.sin(z), Math.cos(t)); })(), s: 0.9 },
 };
 const fingerOf = (P) => FINGERS[P.finger] || FINGERS.ring;
 // On the body the arm stands upright (same pose as for the bangle) and the ring is tilted onto
