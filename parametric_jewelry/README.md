@@ -13,6 +13,7 @@ An interactive, browser-only tool for designing jewelry filled with triply perio
 Gyroid, Schwarz D, Schwarz P, Neovius, Schoen I-WP, Lidinoid, Fischer-Koch S, or a custom formula `f(x, y, z) = 0`. The formula is checked against a whitelist before it runs. The pattern is wrapped around the band, so cells follow the curve and closed bands join seamlessly.
 - **Sheet** (a thickened surface) or **Network** (one side filled, with a bias control)
 - Cells around / across / through, twist, wall thickness, edge rails (or an outer shell on the earring)
+- **Pattern map**: drag a frame grid and drop attractor points to grade the cells (denser or more open). On bands it is the band unrolled; on the earring it is the drop seen from the front
 
 ## Mesh & export
 - Implicit field -> marching cubes (watertight) -> removal of loose fragments -> QEM simplification

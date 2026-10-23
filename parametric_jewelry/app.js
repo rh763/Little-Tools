@@ -165,7 +165,7 @@ const HELP = {
   simp: 'Reduces the number of triangles after processing. Flat areas get large triangles, curved areas keep detail. The value is the largest allowed change in shape. The mesh stays closed and watertight.',
   export: 'Download the processed mesh for printing, casting or CAD.',
   metal: 'Used only to estimate the weight from the mesh volume, and to colour the preview.',
-  map: 'The band unrolled flat: left to right goes around the piece (the front is in the middle), bottom to top goes across its width. The grey pattern is a slice through the middle of the lattice. Drag the black grid points to pull the cells along with them (a warped frame grid). Yellow attractor points make the cells denser around them (positive strength) or larger and more open (negative strength). Walls keep their thickness everywhere, so denser areas are also stiffer and heavier.',
+  map: 'The band unrolled flat: left to right goes around the piece (the front is in the middle), bottom to top goes across its width. On the earring it is the drop seen from the front, with the hook at the top. The grey pattern is a slice through the middle of the lattice. Drag the black grid points to pull the cells along with them (a warped frame grid). Yellow attractor points make the cells denser around them (positive strength) or larger and more open (negative strength). Walls keep their thickness everywhere, so denser areas are also stiffer and heavier.',
   gx: 'How many columns of control points the frame grid has around the band. Changing it resets the grid.',
   attS: 'Positive values pack more, smaller cells around the attractor (up to about 3 times denser at its centre). Negative values open the cells up.',
   attR: 'How far the attractor reaches, in mm along the band.',
@@ -328,7 +328,7 @@ function show(pos, idx) {
 function params() {
   const c = S.cat, p = cur();
   const P = { cat: c, kind: p.kind, expr: p.expr, mode: p.mode, thick: p.thick, iso: p.iso, rim: p.rim, nU: p.nU, nV: p.nV || 1, nW: p.nW || 1, twist: p.twist || 0 };
-  if (c === 'earring') return Object.assign(P, { D: p.D, elong: p.elong });
+  if (c === 'earring') return Object.assign(P, { D: p.D, elong: p.elong, gx: p.gx, goff: [...gridOf(p)], att: p.att.map((a) => ({ ...a })) });
   // closed bands: whole cells around + whole twist, so the lattice joins at the seam
   if (!isOpen(c)) { P.nU = Math.max(1, Math.round(P.nU)); P.twist = Math.round(P.twist); }
   // choker: open arc centred at the front, the back opening (mm along the band) sets the span
@@ -496,8 +496,12 @@ function gridOf(p) {
   if (!p.goff || p.goff.length !== n) p.goff = new Array(n).fill(0);
   return p.goff;
 }
+// earring: the map is the front view of the drop (width D across, drop length D * elong up)
+const mapClosed = () => !isOpen(S.cat) && S.cat !== 'earring';
 const mapGeo = () => {
-  const P = params(), closed = !isOpen(S.cat), Rmid = P.rin + P.T / 2;
+  const P = params(), closed = mapClosed();
+  if (S.cat === 'earring') return { P, closed, L: P.D, Wn: P.D * P.elong };
+  const Rmid = P.rin + P.T / 2;
   return { P, closed, L: (closed ? 2 * Math.PI : P.span * Math.PI / 180) * Rmid, Wn: P.W };
 };
 const PAD = 7;
@@ -510,7 +514,10 @@ const fromPx = (x, y, w, h) => [(x - PAD) / (w - 2 * PAD), 1 - (y - PAD) / (h - 
 function nodeRest(i, j, gx, closed) { return [closed ? i / gx : i / (gx - 1), j / (GRID_ROWS - 1)]; }
 function drawMap() {
   mapQueued = false;
-  if (S.cat === 'earring') return;
+  const ear = S.cat === 'earring';
+  // earring: keep the map at the drop's own proportions (taller for a longer drop)
+  const mh = ear ? `${Math.round(Math.min(Math.max(130 * cur().elong, 110), 260))}px` : '';
+  if (mapCv.style.height !== mh) mapCv.style.height = mh;
   const { w, h } = mapSize(), dpr = Math.min(window.devicePixelRatio || 1, 2);
   if (mapCv.width !== Math.round(w * dpr) || mapCv.height !== Math.round(h * dpr)) { mapCv.width = Math.round(w * dpr); mapCv.height = Math.round(h * dpr); }
   const { P, closed, L, Wn } = mapGeo(), p = cur();
@@ -521,14 +528,23 @@ function drawMap() {
   let F; try { F = compileExpr(P.kind === 'custom' ? P.expr : TPMS[P.kind] || TPMS.gyroid); } catch (e) { return; }
   const warp = makeWarp(P, closed, L, Wn), TAU = 2 * Math.PI;
   const cu = L / P.nU, cw = (cu + Wn / P.nV) / 2 / (P.nW || 1), cm0 = Math.min(cu, Wn / P.nV, cw);
-  const pxmm = Math.max(L / iw, Wn / ih);
+  const pxmm = Math.max(L / iw, Wn / ih), ecell = ear ? P.D / Math.max(P.nU, 1) : 1;
   for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
     const s = (x + 0.5) / iw, v = 1 - (y + 0.5) / ih;
-    let su = s, vq = v, cm = cm0;
+    let su = s, vq = v, cm = ear ? ecell : cm0;
     if (warp) { const q = warp(s, v); su = q.s; vq = q.v; cm /= q.sig; }
-    const f = F(TAU * su * P.nU, TAU * ((vq - 0.5) * P.nV + P.twist * su), 0);
-    let d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f) * cm / TAU - P.thick / 2;
-    if (P.rim > 0) d = Math.min(d, Math.min(v, 1 - v) * Wn - P.rim);
+    let d;
+    if (ear) { // slice through the drop at y = 0 (same field as worker.js), outside the outline stays white
+      const X = su * L - L / 2, Z = vq * Wn - Wn, f = F(TAU * X / ecell, 0, TAU * Z / ecell);
+      const ed = (Math.hypot((s - 0.5) * 2, (v - 0.5) * 2) - 1) * Math.min(L, Wn) / 2; // ~distance to the outline
+      d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f) * cm / TAU - P.thick / 2;
+      if (P.rim > 0) d = Math.min(d, -ed - P.rim);
+      d = Math.max(d, ed);
+    } else {
+      const f = F(TAU * su * P.nU, TAU * ((vq - 0.5) * P.nV + P.twist * su), 0);
+      d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f) * cm / TAU - P.thick / 2;
+      if (P.rim > 0) d = Math.min(d, Math.min(v, 1 - v) * Wn - P.rim);
+    }
     const a = Math.min(Math.max(0.5 - d / pxmm, 0), 1), o = 4 * (y * iw + x);
     const c = 255 - a * 150;
     img.data[o] = c; img.data[o + 1] = c; img.data[o + 2] = c + a * 6; img.data[o + 3] = 255;
@@ -540,7 +556,8 @@ function drawMap() {
   g.strokeStyle = '#141416'; g.lineWidth = 1; g.strokeRect(PAD - 0.5, PAD - 0.5, w - 2 * PAD + 1, h - 2 * PAD + 1);
   // front marker
   const [fx] = toPx(0.5, 0, w, h);
-  g.fillStyle = '#6c6c73'; g.font = '9px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText('front', fx, h - 0.5);
+  g.fillStyle = '#6c6c73'; g.font = '9px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText(ear ? 'bottom' : 'front', fx, h - 0.5);
+  if (ear) { g.fillText('hook', fx, PAD - 0.5); g.strokeStyle = '#6c6c73'; g.beginPath(); g.ellipse(fx, h / 2, (w - 2 * PAD) / 2, (h - 2 * PAD) / 2, 0, 0, 2 * Math.PI); g.stroke(); }
   // frame grid
   const G = gridOf(p), gx = p.gx, pt = (i, j) => { const [s, v] = nodeRest(i, j, gx, closed), k = 2 * (j * gx + i); return toPx(s + G[k], v + G[k + 1], w, h); };
   g.strokeStyle = 'rgba(20,20,22,0.55)'; g.beginPath();
@@ -569,7 +586,7 @@ new ResizeObserver(queueMap).observe(mapCv);
 function hitMap(e) {
   const r = mapCv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, { w, h } = mapSize(), p = cur();
   for (let k = p.att.length - 1; k >= 0; k--) { const [ax, ay] = toPx(p.att[k].u, p.att[k].v, w, h); if (Math.hypot(ax - x, ay - y) < 9) return { kind: 'att', k, x, y }; }
-  const closed = !isOpen(S.cat), G = gridOf(p);
+  const closed = mapClosed(), G = gridOf(p);
   let best = null, bd = 9;
   for (let j = 0; j < GRID_ROWS; j++) for (let i = 0; i < p.gx; i++) {
     const [s, v] = nodeRest(i, j, p.gx, closed), kk = 2 * (j * p.gx + i), [nx, ny] = toPx(s + G[kk], v + G[kk + 1], w, h);
@@ -590,9 +607,9 @@ mapCv.addEventListener('pointermove', (e) => {
   const r = mapCv.getBoundingClientRect(), { w, h } = mapSize(), p = cur();
   let [s, v] = fromPx(e.clientX - r.left, e.clientY - r.top, w, h);
   if (drag.kind === 'att') {
-    const t = p.att[drag.k]; t.u = isOpen(S.cat) ? Math.min(Math.max(s, 0), 1) : ((s % 1) + 1) % 1; t.v = Math.min(Math.max(v, 0), 1);
+    const t = p.att[drag.k]; t.u = !mapClosed() ? Math.min(Math.max(s, 0), 1) : ((s % 1) + 1) % 1; t.v = Math.min(Math.max(v, 0), 1);
   } else {
-    const closed = !isOpen(S.cat), [s0, v0] = nodeRest(drag.i, drag.j, p.gx, closed), G = gridOf(p), k = 2 * (drag.j * p.gx + drag.i);
+    const closed = mapClosed(), [s0, v0] = nodeRest(drag.i, drag.j, p.gx, closed), G = gridOf(p), k = 2 * (drag.j * p.gx + drag.i);
     const ms = 0.42 / (closed ? p.gx : p.gx - 1), mv = 0.42 / (GRID_ROWS - 1); // keep the grid from folding over
     G[k] = Math.min(Math.max(s - s0, -ms), ms); G[k + 1] = Math.min(Math.max(v - v0, -mv), mv);
   }
@@ -630,9 +647,11 @@ function buildAttFields() {
   slider(f, { id: 'attR', label: 'Attractor radius', help: 'attR', unit: 'mm', min: 0.5, max: +(mapGeo().L / 2).toFixed(1), step: 0.1, ...A('r') });
 }
 function buildMap() {
-  $('mapSec').hidden = S.cat === 'earring';
+  $('mapSec').hidden = false;
   $('mapGrid').innerHTML = ''; selAtt = -1; $('mapFields').innerHTML = '';
-  if (S.cat === 'earring') return;
+  $('mapHint').textContent = S.cat === 'earring'
+    ? 'The drop seen from the front (hook at the top). Drag the grid points to bend the cells. Double-click to add an attractor, drag it to move, scroll on it to resize, double-click it to remove.'
+    : 'The band, unrolled (front in the middle). Drag the grid points to bend the cells. Double-click to add an attractor, drag it to move, scroll on it to resize, double-click it to remove.';
   slider($('mapGrid'), { id: 'gx', label: 'Grid columns', help: 'gx', int: true, min: 4, max: 16, step: 1,
     get: () => cur().gx, set: (v) => { if (v !== cur().gx) { cur().gx = v; cur().goff = null; } } });
   queueMap();

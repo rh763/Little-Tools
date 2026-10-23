@@ -77,7 +77,9 @@ float field(vec3 p) {
     vec3 q = vec3(p.x / a, p.y / a, (p.z + c) / c);
     float k0 = length(q), k1 = max(length(vec3(q.x / a, q.y / a, q.z / c)), 1e-9);
     float d = k0 * (k0 - 1.0) / k1;
-    float s = max(d, tpd(p.x / cell, p.y / cell, p.z / cell, cell));
+    float X = p.x, Z = p.z, cme = cell; // pattern map on the front view, same as worker.js
+    if (uGx > 0 || uNA > 0) { vec3 w3 = warp((p.x + a) / (2.0 * a), (p.z + 2.0 * c) / (2.0 * c)); X = w3.x * 2.0 * a - a; Z = w3.y * 2.0 * c - 2.0 * c; cme = cell / w3.z; }
+    float s = max(d, tpd(X / cell, p.y / cell, Z / cell, cme));
     if (uRim > 0.0) s = min(s, max(d, -(d + uRim)));
     float lp = length(vec2(length(vec2(p.y, p.z - zl)) - Rl, p.x)) - wr * 0.5;
     float zs = zl + Rl - 0.2, z0 = zl + Rl + 9.0, Rh = 3.0; // ear hook, same as worker.js
@@ -182,19 +184,21 @@ export function makeImplicitView() {
     U.uNorm.value = norm; U.uIso.value = P.iso; U.uThick.value = P.thick; U.uRim.value = P.rim;
     U.uNU.value = P.nU; U.uNV.value = P.nV; U.uTwist.value = P.twist;
     U.uColor.value.setHex(colorHex); U.uMetal.value = metallic ? 1 : 0;
-    if (P.cat === 'earring') { U.uD.value = P.D; U.uElong.value = P.elong; return; }
+    const setMap = (L, Wn) => { // pattern map (frame grid + attractors), see worker.js makeWarp
+      U.uL.value = L; U.uWn.value = Wn;
+      const G = P.goff, gx = P.gx || 0, hasG = !!(G && gx && G.some((x) => x !== 0));
+      U.uGx.value = hasG ? gx : 0;
+      for (let i = 0; i < 96; i++) U.uGo.value[i] = (hasG && G[i]) || 0;
+      const att = (P.att || []).slice(0, 8); U.uNA.value = att.length;
+      att.forEach((t, i) => U.uAtt.value[i].set(t.u, t.v, t.r, t.s));
+    };
+    if (P.cat === 'earring') { U.uD.value = P.D; U.uElong.value = P.elong; U.uClosed.value = false; setMap(P.D, P.D * P.elong); return; }
     const closed = P.cat !== 'tiara' && P.cat !== 'choker', span = closed ? 2 * Math.PI : P.span * Math.PI / 180, Rmid = P.rin + P.T / 2;
     U.uClosed.value = closed; U.uSpan.value = span; U.uRin.value = P.rin; U.uT.value = P.T; U.uW.value = P.W;
     U.uRound.value = P.round; U.uTanT.value = Math.tan(P.tilt * Math.PI / 180);
     U.uCu.value = span * Rmid / P.nU; U.uCw.value = (span * Rmid / P.nU + P.W / P.nV) / 2 / (P.nW || 1);
     U.uN.value = P.top.length; for (let i = 0; i < 33; i++) U.uTop.value[i] = P.top[i] || 0;
-    // pattern map (frame grid + attractors), see worker.js makeWarp
-    U.uL.value = span * Rmid; U.uWn.value = P.W;
-    const G = P.goff, gx = P.gx || 0, hasG = !!(G && gx && G.some((x) => x !== 0));
-    U.uGx.value = hasG ? gx : 0;
-    for (let i = 0; i < 96; i++) U.uGo.value[i] = (hasG && G[i]) || 0;
-    const att = (P.att || []).slice(0, 8); U.uNA.value = att.length;
-    att.forEach((t, i) => U.uAtt.value[i].set(t.u, t.v, t.r, t.s));
+    setMap(span * Rmid, P.W);
   }
   return { object: box, update };
 }

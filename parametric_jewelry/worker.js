@@ -448,11 +448,15 @@ function makeField(P) {
     // through the lobe, front to back), then a 6 mm tail hanging behind
     const zs = zl + Rl - 0.2, z0 = zl + Rl + 9, Rh = 3, hw = 0.4;
     const bb = { lo: [-a - 1, Math.min(-a - 1, -2 * Rh - 1.5), -2 * c - 1], hi: [a + 1, a + 1, z0 + Rh + 1.5] };
+    // pattern map on the front view of the drop: s = 0..1 across (x), v = 0..1 bottom to top (z)
+    const warp = makeWarp(P, false, 2 * a, 2 * c);
     const f = (x, y, z) => {
       const px = x / a, py = y / a, pz = (z + c) / c;
       const k0 = Math.hypot(px, py, pz), k1 = Math.hypot(px / a, py / a, pz / c) || 1e-9;
       const d = k0 * (k0 - 1) / k1;
-      let s = Math.max(d, tpmsDist(x / cell, y / cell, z / cell, cell));
+      let X = x, Z = z, cm = cell;
+      if (warp) { const q = warp((x + a) / (2 * a), (z + 2 * c) / (2 * c)); X = q.s * 2 * a - a; Z = q.v * 2 * c - 2 * c; cm = cell / q.sig; }
+      let s = Math.max(d, tpmsDist(X / cell, y / cell, Z / cell, cm));
       if (P.rim > 0) s = Math.min(s, Math.max(d, -(d + P.rim)));
       const loop = Math.hypot(Math.hypot(y, z - zl) - Rl, x) - wire / 2;
       const d1 = Math.hypot(y, z - Math.min(Math.max(z, zs), z0));
