@@ -10,6 +10,8 @@ uniform int uCat, uMode, uN; uniform bool uClosed;
 uniform float uNorm, uIso, uThick, uRim, uNU, uNV, uTwist, uRin, uT, uW, uRound, uTanT, uSpan, uCu, uCw, uD, uElong, uMetal;
 uniform float uTop[33];
 uniform int uGx, uNA; uniform float uL, uWn; uniform float uGo[96]; uniform vec4 uAtt[8];
+uniform int uShape; uniform bool uTwo; uniform vec3 uBodyCol; // earring shape 0 ellipsoid 1 box (top face) 2 box (corner); two-material view
+float gEnv; // envelope distance of the last field() call
 varying vec3 vLocal;
 const float PI = 3.14159265359, TAU = 6.28318530718;
 float pw(float a, float b) { return (b == floor(b) && mod(b, 2.0) == 0.0) ? pow(abs(a), b) : sign(a) * pow(abs(a), b); }
@@ -17,7 +19,7 @@ float pw(float a, float b) { return (b == floor(b) && mod(b, 2.0) == 0.0) ? pow(
 const FRAG_BODY = `
 float tpd(float u, float v, float w, float cm) {
   float f = tp(TAU * u, TAU * v, TAU * w) * uNorm;
-  return uMode == 1 ? (f - uIso) * cm / TAU : abs(f) * cm / TAU - uThick * 0.5;
+  return uMode == 1 ? (f - uIso) * cm / TAU : abs(f - uIso) * cm / TAU - uThick * 0.5;
 }
 float gT(int k) { int n = uN; k = uClosed ? ((k % n) + n) % n : clamp(k, 0, n - 1); return uTop[k]; }
 // pattern-map warp, same as worker.js makeWarp: returns (s, v, stretch)
@@ -74,13 +76,28 @@ float prof(float s) {
 float field(vec3 p) {
   if (uCat == 3) {
     float a = uD * 0.5, c = a * uElong, cell = uD / max(uNU, 1.0), Rl = 1.6, wr = 0.9, zl = Rl + wr * 0.2;
-    vec3 q = vec3(p.x / a, p.y / a, (p.z + c) / c);
-    float k0 = length(q), k1 = max(length(vec3(q.x / a, q.y / a, q.z / c)), 1e-9);
-    float d = k0 * (k0 - 1.0) / k1;
-    float X = p.x, Z = p.z, cme = cell; // pattern map on the front view, same as worker.js
-    if (uGx > 0 || uNA > 0) { vec3 w3 = warp((p.x + a) / (2.0 * a), (p.z + 2.0 * c) / (2.0 * c)); X = w3.x * 2.0 * a - a; Z = w3.y * 2.0 * c - 2.0 * c; cme = cell / w3.z; }
-    float s = max(d, tpd(X / cell, p.y / cell, Z / cell, cme));
+    // body frame, same as worker.js: l = point relative to the body centre, local z up
+    vec3 l = vec3(p.x, p.y, p.z + c);
+    float rr = uShape > 0 ? min(0.6, 0.15 * min(a, c)) : 0.0;
+    if (uShape == 2) { // hang from a corner: body diagonal (a, a, c) points straight up
+      float n = length(vec3(a, a, c)), r2 = sqrt(2.0);
+      vec3 e1 = vec3(1.0 / r2, -1.0 / r2, 0.0), e2 = vec3(c, c, -2.0 * a) / (n * r2), e3 = vec3(a, a, c) / n;
+      float nz = dot(e3, vec3(a - rr, a - rr, c - rr)) + rr;
+      l = p.x * e1 + p.y * e2 + (p.z + nz) * e3;
+    }
+    float d;
+    if (uShape > 0) { vec3 qb = abs(l) - vec3(a, a, c) + rr; d = length(max(qb, 0.0)) + min(max(qb.x, max(qb.y, qb.z)), 0.0) - rr; }
+    else {
+      vec3 q = vec3(l.x / a, l.y / a, l.z / c);
+      float k0 = length(q), k1 = max(length(vec3(q.x / a, q.y / a, q.z / c)), 1e-9);
+      d = k0 * (k0 - 1.0) / k1;
+    }
+    gEnv = d;
+    float X = l.x, Z = l.z - c, cme = cell; // pattern map on the front view, same as worker.js
+    if (uGx > 0 || uNA > 0) { vec3 w3 = warp((l.x + a) / (2.0 * a), (l.z + c) / (2.0 * c)); X = w3.x * 2.0 * a - a; Z = w3.y * 2.0 * c - 2.0 * c; cme = cell / w3.z; }
+    float s = max(d, tpd(X / cell, l.y / cell, Z / cell, cme));
     if (uRim > 0.0) s = min(s, max(d, -(d + uRim)));
+    s = min(s, max(d, length(p) - max(1.3, 0.25 * cell))); // solid bail: the pattern always reaches the hook
     float lp = length(vec2(length(vec2(p.y, p.z - zl)) - Rl, p.x)) - wr * 0.5;
     float zs = zl + Rl - 0.2, z0 = zl + Rl + 9.0, Rh = 3.0; // ear hook, same as worker.js
     float d1 = length(vec2(p.y, p.z - clamp(p.z, zs, z0)));
@@ -100,6 +117,7 @@ float field(vec3 p) {
   float qx = abs(w) - uT * 0.5 + rr, qz = abs(zz - zc) - h + rr;
   float d = length(max(vec2(qx, qz), 0.0)) + min(max(qx, qz), 0.0) - rr;
   if (!uClosed) d = max(d, (abs(th) - uSpan * 0.5) * max(r, 1.0));
+  gEnv = d;
   float cm = min(min(uCu * r / Rmid, 2.0 * h / uNV), uCw);
   float su = s, vq = (zz - zc) / (2.0 * h) + 0.5;
   if (uGx > 0 || uNA > 0) { vec3 q = warp(s, vq); su = q.x; vq = q.y; cm /= q.z; }
@@ -132,19 +150,49 @@ void main() {
     t += max(d * 0.7, eps * 0.5);
     if (t > tF) break;
   }
-  if (!hit) discard;
-  vec3 p = ro + rd * t;
+  // two-material view: clear resin envelope around the coloured pattern (front surface only)
+  float tg = tN; bool gHit = false;
+  if (uTwo) {
+    float tl = hit ? t : tF;
+    for (int i = 0; i < 160; i++) {
+      field(ro + rd * tg); float de = gEnv, eps = max(0.004, 0.0006 * tg);
+      if (de < eps) { gHit = true; break; }
+      tg += max(de * 0.8, eps * 0.5);
+      if (tg > tl) break;
+    }
+  }
+  if (!hit && !gHit) discard;
+  vec3 col = vec3(0.0); vec3 p = ro + rd * t;
+  vec3 v = -rd, L = normalize(vec3(0.5, 0.6, 0.8));
   const vec2 k = vec2(1.0, -1.0); float e = 0.01;
-  vec3 n = normalize(k.xyy * field(p + k.xyy * e) + k.yyx * field(p + k.yyx * e) + k.yxy * field(p + k.yxy * e) + k.xxx * field(p + k.xxx * e));
-  float ao = clamp(0.35 + field(p + n * 0.25) / 0.25 * 0.65, 0.25, 1.0);
-  vec3 v = -rd, rf = reflect(rd, n), L = normalize(vec3(0.5, 0.6, 0.8));
-  float fres = pow(1.0 - max(dot(n, v), 0.0), 5.0);
-  vec3 F0 = mix(vec3(0.04), uColor, uMetal);
-  vec3 spec = (F0 + (1.0 - F0) * fres) * envc(rf);
-  float nl = max(dot(n, L), 0.0), sp = pow(max(dot(reflect(-L, n), v), 0.0), 60.0);
-  vec3 col = spec * ao + (1.0 - uMetal) * uColor * (0.25 + 0.75 * nl) * ao + vec3(sp) * mix(0.3, 1.0, uMetal);
-  col = col / (1.0 + col); // simple tone map
-  gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+  if (hit) {
+    vec3 n = normalize(k.xyy * field(p + k.xyy * e) + k.yyx * field(p + k.yyx * e) + k.yxy * field(p + k.yxy * e) + k.xxx * field(p + k.xxx * e));
+    float ao = clamp(0.35 + field(p + n * 0.25) / 0.25 * 0.65, 0.25, 1.0);
+    vec3 rf = reflect(rd, n);
+    float fres = pow(1.0 - max(dot(n, v), 0.0), 5.0);
+    vec3 F0 = mix(vec3(0.04), uColor, uMetal);
+    vec3 spec = (F0 + (1.0 - F0) * fres) * envc(rf);
+    float nl = max(dot(n, L), 0.0), sp = pow(max(dot(reflect(-L, n), v), 0.0), 60.0);
+    col = spec * ao + (1.0 - uMetal) * uColor * (0.25 + 0.75 * nl) * ao + vec3(sp) * mix(0.3, 1.0, uMetal);
+    col = col / (1.0 + col); // simple tone map
+    col = pow(col, vec3(1.0 / 2.2));
+  }
+  float alpha = 1.0;
+  if (gHit && (!hit || tg < t)) { // glass layer in front of the pattern (or of the background)
+    vec3 pg = ro + rd * tg;
+    field(pg + k.xyy * e); float a1 = gEnv; field(pg + k.yyx * e); float a2 = gEnv;
+    field(pg + k.yxy * e); float a3 = gEnv; field(pg + k.xxx * e); float a4 = gEnv;
+    vec3 ng = normalize(k.xyy * a1 + k.yyx * a2 + k.yxy * a3 + k.xxx * a4);
+    float fr = 0.04 + 0.96 * pow(1.0 - max(dot(ng, v), 0.0), 5.0);
+    vec3 refl = envc(reflect(rd, ng)); refl = pow(refl / (1.0 + refl), vec3(1.0 / 2.2));
+    float sp = pow(max(dot(reflect(-L, ng), v), 0.0), 80.0);
+    float ga = clamp(0.14 + 0.7 * fr, 0.0, 0.85); // haze of the resin + fresnel at grazing angles
+    vec3 tint = uBodyCol;
+    if (hit) { col = mix(col * mix(vec3(1.0), tint, 0.25), mix(tint, refl, fr), ga) + vec3(sp); }
+    else { col = mix(tint, refl, fr) + vec3(sp); alpha = ga + sp; }
+    if (!hit) p = pg;
+  }
+  gl_FragColor = vec4(min(col, vec3(1.0)), clamp(alpha, 0.0, 1.0));
   vec4 cp = uProj * viewMatrix * uModel * vec4(p, 1.0);
   gl_FragDepth = clamp(cp.z / cp.w * 0.5 + 0.5, 0.0, 1.0);
 }`;
@@ -156,6 +204,7 @@ export function makeImplicitView() {
   Object.assign(U, { uInvModel: { value: new THREE.Matrix4() }, uModel: { value: new THREE.Matrix4() }, uProj: { value: new THREE.Matrix4() }, uLo: { value: new THREE.Vector3() }, uHi: { value: new THREE.Vector3() },
     uColor: { value: new THREE.Color() }, uCat: { value: 0 }, uMode: { value: 0 }, uN: { value: 32 }, uClosed: { value: true }, uTop: { value: new Array(33).fill(0) },
     uGx: { value: 0 }, uNA: { value: 0 }, uL: { value: 1 }, uWn: { value: 1 }, uGo: { value: new Array(96).fill(0) },
+    uShape: { value: 0 }, uTwo: { value: false }, uBodyCol: { value: new THREE.Color(0xe8eef2) },
     uAtt: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) } });
   // placeholder material until the first update() compiles the shader
   // (a null material crashes three.js's render loop on `material.visible`)
@@ -166,13 +215,16 @@ export function makeImplicitView() {
     U.uModel.value.copy(box.matrixWorld); U.uInvModel.value.copy(box.matrixWorld).invert();
     U.uProj.value.copy(camera.projectionMatrix);
   };
-  function update(P, field, norm, glsl, colorHex, metallic) {
+  function update(P, field, norm, glsl, colorHex, metallic, two) {
     if (glsl !== glslKey) {
       glslKey = glsl;
       if (box.material) box.material.dispose();
-      box.material = new THREE.ShaderMaterial({ uniforms: U, vertexShader: VERT, side: THREE.BackSide,
+      box.material = new THREE.ShaderMaterial({ uniforms: U, vertexShader: VERT, side: THREE.BackSide, transparent: true,
         fragmentShader: FRAG_HEAD + `float tp(float x, float y, float z) { return ${glsl}; }\n` + FRAG_BODY });
     }
+    // two = null or { color } of the clear body (two-material mode)
+    U.uTwo.value = !!two; if (two) U.uBodyCol.value.setHex(two.color);
+    U.uShape.value = P.cat === 'earring' && P.shape === 'box' ? (P.hang === 'corner' ? 2 : 1) : 0;
     const { lo, hi } = field.bb;
     // box geometry = bounding box (BoxGeometry is centred, so rebuild positions)
     const g = new THREE.BoxGeometry(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
