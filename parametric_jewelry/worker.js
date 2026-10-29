@@ -439,25 +439,49 @@ function makeField(P) {
   const TAU = 2 * Math.PI;
   const tpmsDist = (u, v, w, cmin) => {
     const f = F(TAU * u, TAU * v, TAU * w);
-    return P.mode === 'strut' ? (f - P.iso) * cmin / TAU : Math.abs(f) * cmin / TAU - P.thick / 2;
+    // bias (iso) applies to both: network = which side is filled, sheet = which level set gets the wall
+    return P.mode === 'strut' ? (f - P.iso) * cmin / TAU : Math.abs(f - (P.iso || 0)) * cmin / TAU - P.thick / 2;
   };
+  let env = 0; // envelope distance of the last f() call (two-material body = envelope minus pattern)
   if (P.cat === 'earring') {
     const a = P.D / 2, c = a * P.elong, cell = P.D / Math.max(P.nU, 1);
     const Rl = 1.6, wire = 0.9, zl = Rl + wire * 0.2;
     // French ear hook (0.8 mm wire): stem up from the loop, arc over the top (this passes
     // through the lobe, front to back), then a 6 mm tail hanging behind
     const zs = zl + Rl - 0.2, z0 = zl + Rl + 9, Rh = 3, hw = 0.4;
-    const bb = { lo: [-a - 1, Math.min(-a - 1, -2 * Rh - 1.5), -2 * c - 1], hi: [a + 1, a + 1, z0 + Rh + 1.5] };
-    // pattern map on the front view of the drop: s = 0..1 across (x), v = 0..1 bottom to top (z)
+    // body: ellipsoid drop, or a rounded box hanging from its top face or from a corner.
+    // (lx, ly, lz) = point in the body's own frame (centre 0, local z up); the lattice follows that frame
+    const box = P.shape === 'box', corner = box && P.hang === 'corner';
+    const rr = box ? Math.min(0.6, 0.15 * Math.min(a, c)) : 0, n = Math.hypot(a, a, c), r2 = Math.SQRT2;
+    // corner: the body diagonal (a, a, c) points straight up; e1, e2, e3 = world x, y, z in the box frame
+    const e1 = [1 / r2, -1 / r2, 0], e2 = [c / (n * r2), c / (n * r2), -2 * a / (n * r2)], e3 = [a / n, a / n, c / n];
+    const nz = e3[0] * (a - rr) + e3[1] * (a - rr) + e3[2] * (c - rr) + rr; // rounded top corner sits at z = 0
+    const xh = corner ? r2 * a : a, yh = corner ? 4 * a * c / (n * r2) : a, zb = corner ? 2 * nz : 2 * c;
+    const bb = { lo: [-xh - 1, Math.min(-yh - 1, -2 * Rh - 1.5), -zb - 1], hi: [xh + 1, Math.max(yh, 2.5) + 1, z0 + Rh + 1.5] };
+    // pattern map on the front view of the body: s = 0..1 across (local x), v = 0..1 bottom to top (local z)
     const warp = makeWarp(P, false, 2 * a, 2 * c);
+    const rb = Math.max(1.3, 0.25 * cell); // solid bail under the loop, so the pattern always reaches the hook
     const f = (x, y, z) => {
-      const px = x / a, py = y / a, pz = (z + c) / c;
-      const k0 = Math.hypot(px, py, pz), k1 = Math.hypot(px / a, py / a, pz / c) || 1e-9;
-      const d = k0 * (k0 - 1) / k1;
-      let X = x, Z = z, cm = cell;
-      if (warp) { const q = warp((x + a) / (2 * a), (z + 2 * c) / (2 * c)); X = q.s * 2 * a - a; Z = q.v * 2 * c - 2 * c; cm = cell / q.sig; }
-      let s = Math.max(d, tpmsDist(X / cell, y / cell, Z / cell, cm));
+      let lx = x, ly = y, lz = z + c;
+      if (corner) {
+        const zz = z + nz;
+        lx = x * e1[0] + y * e2[0] + zz * e3[0]; ly = x * e1[1] + y * e2[1] + zz * e3[1]; lz = x * e1[2] + y * e2[2] + zz * e3[2];
+      }
+      let d;
+      if (box) {
+        const qx = Math.abs(lx) - a + rr, qy = Math.abs(ly) - a + rr, qz = Math.abs(lz) - c + rr;
+        d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - rr;
+      } else {
+        const px = lx / a, py = ly / a, pz = lz / c;
+        const k0 = Math.hypot(px, py, pz), k1 = Math.hypot(px / a, py / a, pz / c) || 1e-9;
+        d = k0 * (k0 - 1) / k1;
+      }
+      env = d;
+      let X = lx, Z = lz - c, cm = cell;
+      if (warp) { const q = warp((lx + a) / (2 * a), (lz + c) / (2 * c)); X = q.s * 2 * a - a; Z = q.v * 2 * c - 2 * c; cm = cell / q.sig; }
+      let s = Math.max(d, tpmsDist(X / cell, ly / cell, Z / cell, cm));
       if (P.rim > 0) s = Math.min(s, Math.max(d, -(d + P.rim)));
+      s = Math.min(s, Math.max(d, Math.hypot(x, y, z) - rb));
       const loop = Math.hypot(Math.hypot(y, z - zl) - Rl, x) - wire / 2;
       const d1 = Math.hypot(y, z - Math.min(Math.max(z, zs), z0));
       const d3 = Math.hypot(y + 2 * Rh, z - Math.min(Math.max(z, z0 - 6), z0));
@@ -465,7 +489,7 @@ function makeField(P) {
       const hook = Math.hypot(Math.min(d1, d3, da), x) - hw;
       return Math.min(s, loop, hook);
     };
-    return { f, bb };
+    return { f, bb, body: (x, y, z) => { const t = f(x, y, z); return Math.max(env, -t); } };
   }
   const closed = P.cat !== 'tiara' && P.cat !== 'choker';
   const T = P.T, Rmid = P.rin + T / 2, span = closed ? TAU : P.span * Math.PI / 180;
@@ -499,6 +523,7 @@ function makeField(P) {
     const qx = Math.abs(w) - T / 2 + rr, qz = Math.abs(zz - zc) - h + rr;
     let d = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - rr;
     if (!closed) d = Math.max(d, (Math.abs(th) - span / 2) * Math.max(r, 1));
+    env = d;
     const cv = 2 * h / P.nV;
     let cmin = Math.min(cu * r / Rmid, cv, cw), su = s, vq = (zz - zc) / (2 * h) + 0.5;
     if (warp) { const q = warp(s, vq); su = q.s; vq = q.v; cmin /= q.sig; }
@@ -518,7 +543,7 @@ function makeField(P) {
     if (P.rim > 0) out = Math.min(out, Math.max(d, Math.min(zz - bot, top - zz) - P.rim));
     return out;
   };
-  return { f, bb };
+  return { f, bb, body: (x, y, z) => { const t = f(x, y, z); return Math.max(env, -t); } };
 }
 
 // ===================== marching cubes on the field =====================
@@ -621,20 +646,33 @@ function removeIslands(positions, indices, keepFrac = 0.05) {
   return { positions: new Float32Array(outP), indices: outI, islands };
 }
 
-if (typeof module !== 'undefined') module.exports = { TPMS, compileExpr, exprGLSL, makeField, makeWarp, GRID_ROWS, meshField, simplifyMesh, meshVolume, removeIslands, MC };
+// Mesh a job: the piece (or, with m.two, the coloured pattern) plus, with m.two, the clear body
+// = envelope minus pattern. Both come from the same samples, so the two meshes meet exactly.
+// In two-material mode loose fragments are kept: the resin body holds them in place.
+function buildMeshes(m, prog = () => {}) {
+  const field = makeField(m.params), simp = m.simplify > 0, two = !!m.two, parts = two ? 2 : 1, out = { islands: 0 };
+  const one = (fld, k, label, islands) => {
+    const w0 = k / parts, w1 = 1 / parts, sm = simp ? 0.7 : 1;
+    let r = meshField(fld, m.voxel, (f) => prog(w0 + w1 * sm * f, label));
+    if (islands) { r = removeIslands(r.positions, r.indices); out.islands = r.islands; }
+    if (simp) r = simplifyMesh(r.positions, r.indices, m.simplify, (f) => prog(w0 + w1 * (0.7 + 0.3 * f), 'Simplifying...'));
+    return { positions: r.positions, indices: r.indices, volume: meshVolume(r.positions, r.indices) };
+  };
+  out.main = one(field, 0, two ? 'Meshing pattern...' : 'Meshing...', !two && m.islands !== false);
+  if (two) out.body = one({ f: field.body, bb: field.bb }, 1, 'Meshing body...', false);
+  return out;
+}
+
+if (typeof module !== 'undefined') module.exports = { TPMS, compileExpr, exprGLSL, makeField, makeWarp, GRID_ROWS, meshField, simplifyMesh, meshVolume, removeIslands, buildMeshes, MC };
 if (typeof self !== 'undefined' && typeof window === 'undefined' && typeof module === 'undefined') {
   self.onmessage = (e) => {
     const m = e.data;
     try {
       if (m.type === 'check') { compileExpr(m.expr); self.postMessage({ type: 'check', id: m.id, ok: true }); return; }
-      const field = makeField(m.params);
       const prog = (f, label) => self.postMessage({ type: 'progress', id: m.id, f, label });
-      const simp = m.simplify > 0;
-      let r = meshField(field, m.voxel, (f) => prog(f * (simp ? 0.7 : 1), 'Meshing...'));
-      const isl = m.islands === false ? { islands: 0 } : (r = removeIslands(r.positions, r.indices));
-      if (simp) r = simplifyMesh(r.positions, r.indices, m.simplify, (f) => prog(0.7 + 0.3 * f, 'Simplifying...'));
-      const vol = meshVolume(r.positions, r.indices);
-      self.postMessage({ type: 'mesh', id: m.id, final: m.final, positions: r.positions, indices: r.indices, volume: vol, islands: isl.islands }, [r.positions.buffer, r.indices.buffer]);
+      const r = buildMeshes(m, prog), M = r.main, tr = [M.positions.buffer, M.indices.buffer];
+      if (r.body) tr.push(r.body.positions.buffer, r.body.indices.buffer);
+      self.postMessage({ type: 'mesh', id: m.id, final: m.final, positions: M.positions, indices: M.indices, volume: M.volume, islands: r.islands, body: r.body || null }, tr);
     } catch (err) { self.postMessage({ type: 'error', id: m.id, message: String(err.message || err) }); }
   };
 }

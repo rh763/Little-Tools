@@ -29,13 +29,14 @@ const DEF = {
   ring:    { rin: 8.6, T: 1.8, W: 6, round: 0.5, tilt: 0, rise: 0, spread: 0.18, nU: 24, nV: 2, nW: 1, twist: 0, thick: 0.45, rim: 0.4 },
   bangle:  { rin: 30, T: 3, W: 14, round: 0.5, tilt: 0, rise: 0, spread: 0.18, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
   tiara:   { rin: 70, T: 2, W: 10, span: 150, round: 0.5, tilt: 10, rise: 25, spread: 0.16, nU: 40, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
-  earring: { D: 16, elong: 1.3, nU: 1, thick: 0.45, rim: 0, earX: 0, earY: 0, earZ: 0 }, // ear sliders are offsets from the fitted spot in preview.js
+  earring: { D: 16, elong: 1.3, shape: 'drop', hang: 'face', nU: 1, thick: 0.45, rim: 0, earX: 0, earY: 0, earZ: 0 }, // ear sliders are offsets from the fitted spot in preview.js
   choker:  { rin: 52, gap: 12, T: 2, W: 16, round: 0.5, tilt: 0, rise: 6, spread: 0.2, nU: 60, nV: 3, nW: 1, twist: 0, thick: 0.6, rim: 0.6 },
 };
 const isOpen = (c) => c === 'tiara' || c === 'choker';
 const PAT = { kind: 'gyroid', expr: TPMS.gyroid, mode: 'sheet', iso: 0 };
 const fresh = (c) => ({ ...PAT, ...DEF[c], gx: 8, goff: null, att: [] }); // gx/goff/att: pattern map
-const S = { cat: 'ring', finger: 'ring', byCat: {}, res: 0.1, simp: 0.01, metal: 'ag925', fmt: 'stl', xu: 'mm', wire: false };
+const S = { cat: 'ring', finger: 'ring', byCat: {}, res: 0.1, simp: 0.01, metal: 'ag925', fmt: 'stl', xu: 'mm', wire: false, two: false };
+const BODY_COL = 0xe8eef2; // clear resin body in two-material mode
 for (const c of Object.keys(DEF)) S.byCat[c] = fresh(c);
 const cur = () => S.byCat[S.cat];
 
@@ -76,6 +77,14 @@ function slider(parent, o) {
   return c;
 }
 const P_ = (k, scale = 1) => ({ get: () => cur()[k] * scale, set: (v) => (cur()[k] = v / scale) });
+// small radio row for a string setting of the current piece (k), e.g. earring body shape
+function choice(parent, k, label, opts, after) {
+  const row = document.createElement('div'); row.className = 'row';
+  row.innerHTML = `<div class="lbl"><span>${label}</span></div><div class="checks" role="radiogroup" aria-label="${label}">` +
+    opts.map(([v, t]) => `<label class="chk"><input autocomplete="off" type="radio" name="opt_${k}" value="${v}" ${cur()[k] === v ? 'checked' : ''}><span class="box"></span><span>${t}</span></label>`).join('') + '</div>';
+  parent.appendChild(row);
+  row.querySelectorAll('input').forEach((el) => el.addEventListener('change', () => { if (!el.checked) return; cur()[k] = el.value; if (after) after(); changed(true); }));
+}
 
 function buildFields() {
   controls = [];
@@ -85,7 +94,9 @@ function buildFields() {
   $('viewFields').hidden = c !== 'earring'; $('fingerPick').hidden = c !== 'ring';
   if (c === 'earring') {
     slider(g, { id: 'D', label: 'Width', help: 'D', unit: 'mm', min: 6, max: 40, step: 0.5, ...P_('D') });
-    slider(g, { id: 'elong', label: 'Drop length', help: 'elong', hint: () => 'x half-width', min: 0.5, max: 3, step: 0.05, ...P_('elong') });
+    choice(g, 'shape', 'Body', [['drop', 'Drop'], ['box', 'Box']], () => buildFields());
+    if (cur().shape === 'box') choice(g, 'hang', 'Hang from', [['face', 'Top face'], ['corner', 'Corner']]);
+    slider(g, { id: 'elong', label: cur().shape === 'box' ? 'Box height' : 'Drop length', help: 'elong', hint: () => 'x half-width', min: 0.5, max: 3, step: 0.05, ...P_('elong') });
     // where the pair hangs on the head (preview only: the exported mesh is unchanged) -> viewport panel
     const wearUpd = () => updateMannequin(params()), v = $('viewFields');
     slider(v, { id: 'earX', label: 'On ear: out from head', help: 'earPos', unit: 'mm', min: -15, max: 15, step: 0.5, onchange: wearUpd, ...P_('earX') });
@@ -116,11 +127,11 @@ function buildFields() {
     slider(p, { id: 'nW', label: 'Cells through thickness', help: 'nW', int: true, min: 1, max: 4, step: 1, ...P_('nW') });
   } // twist (pattern rotation) lives next to the pattern map, see buildMap()
   const sheetRow = slider(p, { id: 'thick', label: 'Wall thickness', help: 'thick', unit: 'mm', min: 0.2, max: 3, step: 0.01, ...P_('thick') });
-  const isoRow = slider(p, { id: 'iso', label: 'Network bias', help: 'iso', hint: () => '- thinner, + thicker', min: -1.2, max: 1.2, step: 0.01, ...P_('iso') });
+  const isoRow = slider(p, { id: 'iso', label: 'Bias', help: 'iso', hint: () => (cur().mode === 'sheet' ? 'shifts the wall' : '- thinner, + thicker'), min: -1.2, max: 1.2, step: 0.01, ...P_('iso') });
   sheetRow.el = p.children[p.children.length - 2]; isoRow.el = p.lastElementChild;
   slider(p, { id: 'rim', label: c === 'earring' ? 'Outer shell' : 'Edge rails', help: 'rim', hint: () => '0 = off', unit: 'mm', min: 0, max: 3, step: 0.05, ...P_('rim') });
   syncPattern = () => {
-    sheetRow.el.hidden = cur().mode !== 'sheet'; isoRow.el.hidden = cur().mode === 'sheet';
+    sheetRow.el.hidden = cur().mode !== 'sheet'; isoRow.el.hidden = false; isoRow.refresh(); // bias works for sheet and network
     $('kind').value = cur().kind; $('expr').value = cur().expr;
     document.querySelector(`input[name=mode][value=${cur().mode}]`).checked = true;
     $('exprNote').hidden = true;
@@ -157,7 +168,7 @@ const HELP = {
   nW: 'How many cells fit through the band thickness. 1 gives an open pattern you can see through.',
   twist: 'Shifts the pattern across the width as it goes around, so the cells spiral. Whole numbers keep a closed band seamless.',
   thick: 'Wall thickness of the sheet. For casting in silver or gold keep it at least 0.4 to 0.5 mm; for resin printing 0.3 mm can work.',
-  iso: 'Moves the surface level for the network. Positive values give thicker struts and more material, negative values thinner struts. Too far either way and the network breaks apart or fills in.',
+  iso: 'Moves the surface level (f = bias instead of f = 0). Works for every surface. Network: positive values give thicker struts and more material, negative values thinner struts. Sheet: the wall moves off the minimal surface, so one channel grows and the other shrinks. Too far either way and the lattice breaks apart or fills in.',
   rim: 'Solid rails along both edges of the band, this thick. They make the piece much stronger and more comfortable. On the earring it is a thin solid shell around the drop. 0 turns it off.',
   mesh: 'The preview is meshed on a coarser grid so it stays fast. Process mesh builds the mesh at the chosen resolution, which is needed before downloading.',
   res: 'Voxel size used to turn the implicit solid into triangles. Smaller is smoother and more accurate but slower and gives bigger files. Use about a quarter of the wall thickness or finer.',
@@ -217,6 +228,7 @@ $('wire').addEventListener('change', (e) => {
   if (e.target.checked && iv) { iv.object.visible = false; if (meshObj) meshObj.visible = true; } // wireframe needs the mesh
 });
 radios('fmt', (v) => (S.fmt = v));
+$('two').addEventListener('change', (e) => { S.two = e.target.checked; changed(); });
 radios('xu', (v) => (S.xu = v));
 
 // ---------------- viewer ----------------
@@ -260,9 +272,9 @@ function updateImplicit(P) {
   if (!iv) return;
   try {
     const src = P.kind === 'custom' ? P.expr : TPMS[P.kind] || TPMS.gyroid;
-    const plastic = S.metal === 'resin' || S.metal === 'pla';
-    iv.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic);
-    if (ivR && P.cat === 'earring') ivR.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic);
+    const plastic = S.metal === 'resin' || S.metal === 'pla', two = S.two ? { color: BODY_COL } : null;
+    iv.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic, two);
+    if (ivR && P.cat === 'earring') ivR.update(P, makeField(P), compileExpr(src).norm, exprGLSL(src), metal()[3], !plastic, two);
     iv.object.visible = true;
     if (meshObj) meshObj.visible = false;
   } catch (e) { iv.object.visible = false; if (meshObj) meshObj.visible = true; }
@@ -335,12 +347,23 @@ function show(pos, idx) {
   lastBB = { lo: b.min.toArray(), hi: b.max.toArray() };
   $('dims').textContent = `${fmt(b.max.x - b.min.x, 1)} \u00d7 ${fmt(b.max.y - b.min.y, 1)} \u00d7 ${fmt(b.max.z - b.min.z, 1)} mm`;
 }
+// two-material mode: the clear body (envelope minus pattern) as a see-through mesh around the pattern
+const matClear = new THREE.MeshStandardMaterial({ color: BODY_COL, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.28, depthWrite: false });
+let bodyObj = null;
+function showBody(b) {
+  if (bodyObj) { (bodyObj.parent || root).remove(bodyObj); bodyObj.geometry.dispose(); bodyObj = null; }
+  if (!b || !meshObj) return;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(b.positions, 3)); g.setIndex(new THREE.BufferAttribute(b.indices, 1));
+  g.computeVertexNormals();
+  bodyObj = new THREE.Mesh(g, matClear); bodyObj.renderOrder = 1; meshObj.add(bodyObj); // follows the pattern mesh's visibility
+}
 
 // ---------------- jobs ----------------
 function params() {
   const c = S.cat, p = cur();
   const P = { cat: c, kind: p.kind, expr: p.expr, mode: p.mode, thick: p.thick, iso: p.iso, rim: p.rim, nU: p.nU, nV: p.nV || 1, nW: p.nW || 1, twist: p.twist || 0 };
-  if (c === 'earring') return Object.assign(P, { D: p.D, elong: p.elong, gx: p.gx, goff: [...gridOf(p)], att: p.att.map((a) => ({ ...a })) });
+  if (c === 'earring') return Object.assign(P, { D: p.D, elong: p.elong, shape: p.shape || 'drop', hang: p.hang || 'face', gx: p.gx, goff: [...gridOf(p)], att: p.att.map((a) => ({ ...a })) });
   // closed bands: whole cells around + whole twist, so the lattice joins at the seam
   if (!isOpen(c)) { P.nU = Math.max(1, Math.round(P.nU)); P.twist = Math.round(P.twist); }
   // choker: open arc centred at the front, the back opening (mm along the band) sets the span
@@ -365,7 +388,7 @@ function previewVoxel(P) {
 }
 let worker = null, useMain = false, busy = false, pending = null, jobId = 0, running = null;
 let finalMesh = null; // {key, positions, indices, volume}
-const keyOf = () => JSON.stringify([params(), S.res, S.simp]);
+const keyOf = () => JSON.stringify([params(), S.res, S.simp, S.two]);
 function makeWorker() {
   if (useMain) return null;
   try {
@@ -383,11 +406,8 @@ function start(job) {
   // main-thread fallback (sandboxed pages may block workers)
   setTimeout(() => {
     try {
-      const f = makeField(job.params);
-      let r = meshField(f, job.voxel);
-      const isl = r = removeIslands(r.positions, r.indices);
-      if (job.simplify > 0) r = simplifyMesh(r.positions, r.indices, job.simplify);
-      onMsg({ type: 'mesh', id: job.id, final: job.final, positions: r.positions, indices: r.indices, volume: meshVolume(r.positions, r.indices), islands: isl.islands });
+      const r = buildMeshes(job), M = r.main;
+      onMsg({ type: 'mesh', id: job.id, final: job.final, positions: M.positions, indices: M.indices, volume: M.volume, islands: r.islands, body: r.body || null });
     } catch (err) { onMsg({ type: 'error', id: job.id, message: String(err.message || err) }); }
   }, 30);
 }
@@ -406,8 +426,8 @@ function onMsg(m) {
   else if (m.type === 'mesh') {
     $('err').hidden = true;
     if (job.final && iv) iv.object.visible = false; // processed mesh replaces the implicit view
-    show(m.positions, m.indices);
-    if (job.final && job.key === keyOf()) finalMesh = { key: job.key, positions: m.positions, indices: m.indices, volume: m.volume };
+    show(m.positions, m.indices); showBody(m.body);
+    if (job.final && job.key === keyOf()) finalMesh = { key: job.key, positions: m.positions, indices: m.indices, volume: m.volume, body: m.body || null };
     $('status').innerHTML = `<b>${job.final ? 'Processed mesh' : 'Preview'}</b> \u00b7 voxel ${fmt(job.voxel, 3)} mm \u00b7 ${(m.indices.length / 3).toLocaleString()} triangles${m.islands ? ` \u00b7 ${m.islands} loose fragments removed` : ''}`;
     if (!job.final) previewVol = m.volume;
     if (job.fit) fitView();
@@ -432,7 +452,7 @@ function changed(fit = false) {
 $('process').addEventListener('click', () => {
   const P = params();
   $('busy').hidden = false; $('busy').textContent = 'Meshing\u2026';
-  submit({ type: 'mesh', params: P, voxel: S.res, simplify: S.simp, final: true, key: keyOf() });
+  submit({ type: 'mesh', params: P, voxel: S.res, simplify: S.simp, final: true, two: S.two, key: keyOf() });
 });
 
 // ---------------- stats + export ----------------
@@ -448,7 +468,7 @@ function updateStats() {
 function updateExport() {
   const ok = !!finalMesh && finalMesh.key === keyOf();
   $('download').disabled = !ok;
-  $('dlHint').textContent = ok ? `Ready: ${S.cat === 'earring' ? 'earring pair (left + mirrored right)' : S.cat} at ${S.res} mm.` : 'Process the mesh first.';
+  $('dlHint').textContent = ok ? `Ready: ${S.cat === 'earring' ? 'earring pair (left + mirrored right)' : S.cat} at ${S.res} mm${finalMesh.body ? ', two files (pattern + clear body)' : ''}.` : 'Process the mesh first.';
 }
 function earringPair(pos, idx) { // left piece + mirrored right piece, side by side 4 mm apart
   const n = pos.length, nv = n / 3, P2 = new Float32Array(2 * n), I2 = new Uint32Array(2 * idx.length);
@@ -488,14 +508,18 @@ function toOBJ(pos, idx, sc) {
 $('download').addEventListener('click', () => {
   if (!finalMesh) return;
   const sc = S.xu === 'in' ? 1 / 25.4 : 1;
-  let pos = finalMesh.positions, idx = finalMesh.indices;
-  if (S.cat === 'earring') ({ pos, idx } = earringPair(pos, idx));
-  const blob = S.fmt === 'stl' ? toSTL(pos, idx, sc) : toOBJ(pos, idx, sc);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `tpms_${S.cat}${S.cat === 'earring' ? '_pair' : ''}_${cur().kind}_${S.res}mm.${S.fmt}`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  const save = (pos, idx, tag) => {
+    if (S.cat === 'earring') ({ pos, idx } = earringPair(pos, idx));
+    const blob = S.fmt === 'stl' ? toSTL(pos, idx, sc) : toOBJ(pos, idx, sc);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tpms_${S.cat}${S.cat === 'earring' ? '_pair' : ''}_${cur().kind}_${S.res}mm${tag}.${S.fmt}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+  // two materials: one file per material, same coordinates, so they line up in the slicer
+  save(finalMesh.positions, finalMesh.indices, finalMesh.body ? '_pattern' : '');
+  if (finalMesh.body) setTimeout(() => save(finalMesh.body.positions, finalMesh.body.indices, '_body'), 300);
 });
 
 // ---------------- pattern map (unrolled band: frame grid + attractors) ----------------
@@ -555,12 +579,12 @@ function drawMap() {
     if (ear) { // slice through the drop at y = 0 (same field as worker.js), outside the outline stays white
       const X = su * L - L / 2, Z = vq * Wn - Wn, f = F(TAU * X / ecell, 0, TAU * Z / ecell);
       const ed = (Math.hypot((s - 0.5) * 2, (v - 0.5) * 2) - 1) * Math.min(L, Wn) / 2; // ~distance to the outline
-      d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f) * cm / TAU - P.thick / 2;
+      d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f - P.iso) * cm / TAU - P.thick / 2;
       if (P.rim > 0) d = Math.min(d, -ed - P.rim);
       d = Math.max(d, ed);
     } else {
       const f = F(TAU * su * P.nU, TAU * ((vq - 0.5) * P.nV + P.twist * su), 0);
-      d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f) * cm / TAU - P.thick / 2;
+      d = P.mode === 'strut' ? (f - P.iso) * cm / TAU : Math.abs(f - P.iso) * cm / TAU - P.thick / 2;
       if (P.rim > 0) d = Math.min(d, Math.min(v, 1 - v) * Wn - P.rim);
     }
     const a = Math.min(Math.max(0.5 - d / pxmm, 0), 1), o = 4 * (y * iw + x);
