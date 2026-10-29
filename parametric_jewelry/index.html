@@ -132,14 +132,15 @@
         <div id="viewFields" class="group" hidden></div>
       </div>
       <!-- pattern map: 2D unrolled band on the right of the viewport, next to the 3D piece -->
-      <section class="group vmap" id="mapSec">
-        <div class="tabline"><h2 class="tab">Pattern map</h2><button type="button" class="qi" data-help="map">?</button></div>
-        <p class="hint-line" id="mapHint">The band, unrolled (front in the middle). Drag the grid points to bend the cells. Double-click to add an attractor, drag it to move, scroll on it to resize, double-click it to remove.</p>
-        <canvas id="map" class="pmap" aria-label="Pattern map: unrolled band with draggable frame grid and attractor points"></canvas>
-        <div class="btns">
-          <button type="button" class="b" id="mapAdd">Add attractor</button>
-          <button type="button" class="b" id="mapReset">Reset map</button>
+      <!-- frameless, drag the grip to move it anywhere over the viewport -->
+      <section class="group vmap" id="mapSec" aria-label="Pattern map">
+        <div class="vmap-bar">
+          <span class="grip" id="mapGrip" title="Move" aria-hidden="true">&#x2807;&#x2807;</span>
+          <button type="button" class="ib" id="mapRand" title="Random pattern" aria-label="Random pattern">&#x2684;</button>
+          <button type="button" class="ib" id="mapAdd" title="Add attractor" aria-label="Add attractor">+</button>
+          <button type="button" class="ib" id="mapReset" title="Reset map" aria-label="Reset map">&#x21BA;</button>
         </div>
+        <canvas id="map" class="pmap" aria-label="Pattern map: drag grid points to bend cells, double-click to add or remove an attractor, scroll on an attractor to resize it"></canvas>
         <div id="mapGrid" class="group"></div>
         <div id="mapFields" class="group"></div>
       </section>
